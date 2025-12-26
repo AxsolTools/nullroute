@@ -101,7 +101,7 @@ export async function createTransaction(
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // Add timeout for serverless environments (Vercel has 10s timeout for Hobby, 60s for Pro)
+      // Add timeout for API requests
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
 

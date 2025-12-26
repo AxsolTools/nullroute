@@ -25,6 +25,12 @@
         {
           "key": "NODE_ENV",
           "value": "production"
+        },
+        {
+          "key": "CHANGENOW_API_KEY",
+          "value": "8bce3912ce8d326dd7ec028a84e33c110767b44964e8cd78525dea6b406029d5",
+          "scope": "RUN_TIME",
+          "type": "SECRET"
         }
       ]
     }
