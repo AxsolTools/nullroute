@@ -4,8 +4,33 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { trpc } from "@/lib/trpc";
 import { COMMUNITY_URL, APP_LOGO } from "@/const";
+
+// Map internal status to user-friendly status and progress
+function getStatusDisplay(status?: string): { label: string; progress: number; color: string } {
+  switch (status) {
+    case "waiting":
+      return { label: "Awaiting Deposit", progress: 10, color: "text-yellow-500" };
+    case "confirming":
+      return { label: "Confirming Deposit", progress: 30, color: "text-yellow-500" };
+    case "exchanging":
+      return { label: "Processing Exchange", progress: 50, color: "text-blue-500" };
+    case "sending":
+      return { label: "Sending to Recipient", progress: 75, color: "text-blue-500" };
+    case "finished":
+      return { label: "Completed", progress: 100, color: "text-green-500" };
+    case "failed":
+      return { label: "Failed", progress: 0, color: "text-red-500" };
+    case "refunded":
+      return { label: "Refunded", progress: 0, color: "text-orange-500" };
+    case "expired":
+      return { label: "Expired", progress: 0, color: "text-gray-500" };
+    default:
+      return { label: "Processing", progress: 5, color: "text-gray-400" };
+  }
+}
 
 export default function Home() {
   const [, setLocation] = useLocation();
@@ -41,6 +66,7 @@ export default function Home() {
   const [transactionResult, setTransactionResult] = useState<{
     txSignature: string;
     payinAddress?: string;
+    routingTransactionId?: string;
   } | null>(null);
 
   const transferMutation = trpc.transaction.transfer.useMutation({
@@ -48,6 +74,7 @@ export default function Home() {
       setTransactionResult({
         txSignature: data.txSignature,
         payinAddress: data.payinAddress,
+        routingTransactionId: data.routingTransactionId,
       });
       toast.success("Transaction created! Please send SOL to complete the transfer.");
     },
@@ -56,6 +83,24 @@ export default function Home() {
       setTransactionResult(null);
     },
   });
+
+  // Poll for transaction status
+  const { data: transactionStatus, refetch: refetchStatus } = trpc.transaction.getRoutingStatus.useQuery(
+    { routingTransactionId: transactionResult?.routingTransactionId || "" },
+    {
+      enabled: !!transactionResult?.routingTransactionId,
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        // Stop polling if transaction is finished, failed, refunded, or expired
+        if (status === "finished" || status === "failed" || status === "refunded" || status === "expired") {
+          return false;
+        }
+        // Poll every 5 seconds for active transactions
+        return 5000;
+      },
+      refetchOnWindowFocus: true,
+    }
+  );
 
   const handleTransfer = () => {
     // Validate inputs
@@ -624,13 +669,58 @@ export default function Home() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <div className="flex-1 space-y-3">
+                      <div className="flex-1 space-y-4">
                         <div>
                           <h4 className="font-bold text-white mb-2 text-lg">Transaction Created Successfully</h4>
                           <p className="text-sm text-gray-400 mb-4">
                             To complete your private transfer, send <strong className="text-white">{parseFloat(transferAmount || "0").toFixed(6)} SOL</strong> to the address below:
                           </p>
                         </div>
+
+                        {/* Real-time Status Bar */}
+                        {transactionStatus && (
+                          <div className="bg-[#1a1a1a] rounded-lg p-4 border border-[#333333] space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-semibold text-white">Transaction Status</span>
+                              <span className={`text-sm font-bold ${getStatusDisplay(transactionStatus.status).color}`}>
+                                {getStatusDisplay(transactionStatus.status).label}
+                              </span>
+                            </div>
+                            <Progress value={getStatusDisplay(transactionStatus.status).progress} className="h-2" />
+                            <div className="text-xs text-gray-400 space-y-1">
+                              {transactionStatus.status === "waiting" && (
+                                <p>Waiting for your deposit to be detected on the network...</p>
+                              )}
+                              {transactionStatus.status === "confirming" && (
+                                <p>Your deposit is being confirmed by the network. This may take a few minutes.</p>
+                              )}
+                              {transactionStatus.status === "exchanging" && (
+                                <p>Processing your private transaction through secure routing...</p>
+                              )}
+                              {transactionStatus.status === "sending" && (
+                                <p>Finalizing and sending funds to the recipient address...</p>
+                              )}
+                              {transactionStatus.status === "finished" && (
+                                <div className="space-y-1">
+                                  <p className="text-green-500 font-semibold">✓ Transaction completed successfully!</p>
+                                  {transactionStatus.payoutHash && (
+                                    <p className="text-xs">Payout hash: <code className="text-gray-500">{transactionStatus.payoutHash.slice(0, 16)}...</code></p>
+                                  )}
+                                </div>
+                              )}
+                              {transactionStatus.status === "failed" && (
+                                <p className="text-red-500">Transaction failed. Please contact support if you need assistance.</p>
+                              )}
+                              {transactionStatus.status === "refunded" && (
+                                <p className="text-orange-500">Funds have been refunded to the original sender.</p>
+                              )}
+                              {transactionStatus.status === "expired" && (
+                                <p className="text-gray-500">Transaction expired. Please create a new transaction.</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
                         <div className="bg-[#1a1a1a] rounded-lg p-4 border border-[#333333]">
                           <Label className="text-xs text-gray-400 mb-2 block">Send SOL to this address:</Label>
                           <div className="flex items-center space-x-2">
