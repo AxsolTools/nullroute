@@ -342,7 +342,7 @@ export async function estimateTransactionFees(
   }
 
   try {
-    // Add timeout for serverless environments
+    // Add timeout for API requests
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
