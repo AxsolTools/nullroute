@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { Connection } from "@solana/web3.js";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -9,16 +12,12 @@ import { COMMUNITY_URL, APP_LOGO } from "@/const";
 
 export default function Home() {
   const [, setLocation] = useLocation();
+  const { publicKey, connected, connecting, disconnect } = useWallet();
+  const [balance, setBalance] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"transfer" | "history" | "about">("about");
   const [transferRecipient, setTransferRecipient] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
-  const [transactionResult, setTransactionResult] = useState<{
-    txSignature: string;
-    depositAddress: string;
-    routingTransactionId?: string;
-    amountSol: number;
-    recipientAddress: string;
-  } | null>(null);
+  const [walletRegistered, setWalletRegistered] = useState(false);
 
   const handleLogoClick = () => {
     setLocation("/");
@@ -26,17 +25,122 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Create transfer transaction
+  const connection = new Connection("https://api.devnet.solana.com");
+
+  // Register wallet in backend when connected
+  const walletConnectMutation = trpc.wallet.connect.useMutation({
+    onSuccess: () => {
+      setWalletRegistered(true);
+      console.log("Wallet registered in backend");
+    },
+    onError: (error) => {
+      console.error("Failed to register wallet:", error);
+      const errorMessage = error.message || "Failed to register wallet";
+      
+      // Show more specific error messages
+      if (errorMessage.includes("Database") || errorMessage.includes("DATABASE_URL")) {
+        toast.error("Database connection issue. Please contact support or try again later.");
+      } else if (errorMessage.includes("Invalid Solana public key")) {
+        toast.error("Invalid wallet address. Please reconnect your wallet.");
+      } else if (errorMessage.includes("Unexpected end of JSON input") || errorMessage.includes("json")) {
+        toast.error("Server error: Invalid response. Please try again or contact support.");
+      } else {
+        toast.error(`Failed to register wallet: ${errorMessage}`);
+      }
+      
+      setWalletRegistered(false);
+    },
+  });
+
+  // Disconnect wallet mutation
+  const walletDisconnectMutation = trpc.wallet.disconnect.useMutation({
+    onSuccess: () => {
+      setWalletRegistered(false);
+      disconnect();
+      toast.success("Wallet disconnected");
+    },
+    onError: (error) => {
+      console.error("Failed to disconnect wallet:", error);
+      toast.error(`Failed to disconnect: ${error.message || "Unknown error"}`);
+    },
+  });
+
+  const handleDisconnect = async () => {
+    if (publicKey) {
+      try {
+        await walletDisconnectMutation.mutateAsync({ publicKey: publicKey.toBase58() });
+      } catch (error) {
+        // Error already handled in mutation
+      }
+    } else {
+      disconnect();
+    }
+  };
+
+  // Register wallet when it connects
+  useEffect(() => {
+    if (publicKey && connected && !walletRegistered && !walletConnectMutation.isPending) {
+      const publicKeyStr = publicKey.toBase58();
+      console.log("Registering wallet in backend:", publicKeyStr);
+      walletConnectMutation.mutate({ publicKey: publicKeyStr });
+    } else if (!connected) {
+      setWalletRegistered(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publicKey, connected, walletRegistered]);
+
+  // Fetch wallet balance
+  useEffect(() => {
+    if (publicKey && connected) {
+      connection.getBalance(publicKey).then((bal) => {
+        setBalance(bal / 1e9);
+      }).catch((error) => {
+        console.error("Failed to fetch balance:", error);
+        setBalance(null);
+      });
+    } else {
+      setBalance(null);
+    }
+  }, [publicKey, connected]);
+
+  const { data: transactions } = trpc.transaction.history.useQuery(
+    { publicKey: publicKey?.toBase58() || "" },
+    {
+      enabled: connected && !!publicKey,
+    }
+  );
+
+  // Estimate fees when amount changes (with debouncing)
+  const [debouncedAmount, setDebouncedAmount] = useState("");
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedAmount(transferAmount);
+    }, 500); // 500ms debounce
+    
+    return () => clearTimeout(timer);
+  }, [transferAmount]);
+
+  const { data: feeEstimate, isLoading: isEstimatingFees } = trpc.transaction.estimateFees.useQuery(
+    { amountSol: debouncedAmount },
+    {
+      enabled: connected && !!debouncedAmount && parseFloat(debouncedAmount) > 0 && !isNaN(parseFloat(debouncedAmount)),
+      refetchOnWindowFocus: false,
+    }
+  );
+
+  const [transactionResult, setTransactionResult] = useState<{
+    txSignature: string;
+    payinAddress?: string;
+  } | null>(null);
+
   const transferMutation = trpc.transaction.transfer.useMutation({
     onSuccess: (data) => {
       setTransactionResult({
         txSignature: data.txSignature,
-        depositAddress: data.depositAddress,
-        routingTransactionId: data.routingTransactionId,
-        amountSol: data.amountSol,
-        recipientAddress: data.recipientAddress,
+        payinAddress: data.payinAddress,
       });
-      toast.success("Transaction created! Please send SOL to the deposit address.");
+      toast.success("Transaction created! Please send SOL to complete the transfer.");
     },
     onError: (error) => {
       toast.error(error.message || "Failed to create transaction");
@@ -45,6 +149,16 @@ export default function Home() {
   });
 
   const handleTransfer = () => {
+    if (!publicKey) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    if (!walletRegistered) {
+      toast.error("Wallet not registered. Please wait for connection to complete.");
+      return;
+    }
+
     // Validate inputs
     if (!transferRecipient || transferRecipient.trim().length === 0) {
       toast.error("Please enter a recipient address");
@@ -56,73 +170,17 @@ export default function Home() {
       return;
     }
 
+    const amount = parseFloat(transferAmount);
+    if (balance !== null && amount > balance) {
+      toast.error("Insufficient balance");
+      return;
+    }
+
     transferMutation.mutate({
       recipientPublicKey: transferRecipient.trim(),
       amountSol: transferAmount,
     });
   };
-
-  const downloadTransactionInfo = () => {
-    if (!transactionResult) return;
-
-    const content = `NULLROUTE Transaction Information
-
-Transaction ID: ${transactionResult.txSignature}
-Deposit Address (Send SOL here): ${transactionResult.depositAddress}
-Recipient Address: ${transactionResult.recipientAddress}
-Amount: ${transactionResult.amountSol} SOL
-
-⚠️ IMPORTANT INSTRUCTIONS:
-1. Send exactly ${transactionResult.amountSol.toFixed(6)} SOL to the deposit address above
-2. The transaction will be automatically processed and routed privately
-3. Monitor the transaction status in the app
-4. Save this information for your records
-
-Generated: ${new Date().toISOString()}
-`;
-
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `nullroute-tx-${transactionResult.txSignature.slice(0, 8)}-info.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Transaction info downloaded!");
-  };
-
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard!`);
-  };
-
-  // Get transaction status
-  const { data: transactionStatus } = trpc.transaction.getTransaction.useQuery(
-    { txSignature: transactionResult?.txSignature || "" },
-    {
-      enabled: !!transactionResult?.txSignature,
-      refetchInterval: 5000, // Poll every 5 seconds
-    }
-  );
-
-  // Get routing status if we have a routing transaction ID
-  const { data: routingStatus } = trpc.transaction.getRoutingStatus.useQuery(
-    { routingTransactionId: transactionResult?.routingTransactionId || "" },
-    {
-      enabled: !!transactionResult?.routingTransactionId,
-      refetchInterval: 10000, // Poll every 10 seconds
-    }
-  );
-
-  // Get recent transactions for history
-  const { data: recentTransactions } = trpc.transaction.getRecent.useQuery(
-    undefined,
-    {
-      refetchInterval: 10000, // Poll every 10 seconds
-    }
-  );
 
   return (
     <div className="min-h-screen gradient-bg">
@@ -185,6 +243,17 @@ Generated: ${new Date().toISOString()}
               >
                 Community
               </a>
+              {connected && (
+                <Button
+                  onClick={handleDisconnect}
+                  disabled={walletDisconnectMutation.isPending}
+                  variant="outline"
+                  className="hidden sm:flex border-[#333333] text-gray-400 hover:text-white hover:border-primary"
+                >
+                  {walletDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                </Button>
+              )}
+              <WalletMultiButton />
             </div>
           </div>
         </div>
@@ -226,10 +295,10 @@ Generated: ${new Date().toISOString()}
           </button>
         </div>
 
-        {/* About Tab - Keep existing content */}
+        {/* About Tab */}
         {activeTab === "about" && (
           <div className="max-w-5xl mx-auto space-y-10">
-            {/* Hero Section */}
+            {/* Hero Section - Modern Layout */}
             <div className="text-center space-y-8 py-16">
               <div className="flex justify-center">
                 <img src={APP_LOGO} alt="NULLROUTE" className="w-40 h-40 rounded-2xl border-2 border-primary shadow-[0_0_40px_rgba(5,79,252,0.4)]" />
@@ -239,10 +308,28 @@ Generated: ${new Date().toISOString()}
                   NR <span className="text-primary">Ø</span> ROUTE
                 </h1>
                 
+                {/* Technical Specifications */}
+                <div className="flex flex-wrap justify-center items-center gap-6 text-sm font-mono text-gray-400">
+                  <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
+                    <span className="text-primary">80%</span> MIN.
+                  </div>
+                  <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
+                    NR24-61-R122
+                  </div>
+                  <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
+                    PRIVACY TRANSP.
+                  </div>
+                  <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
+                    NR24-ZK51-R122
+                  </div>
+                </div>
+
+                {/* NULLROUTE Highlight Box */}
                 <div className="inline-flex items-center justify-center px-8 py-4 rounded-xl bg-primary border-2 border-white/20 shadow-[0_0_40px_rgba(5,79,252,0.6)]">
                   <span className="text-2xl font-bold text-white tracking-wide">NULLROUTE</span>
                 </div>
 
+                {/* Core Features */}
                 <div className="space-y-3 max-w-3xl mx-auto">
                   <p className="text-xl text-white font-semibold leading-relaxed">
                     NULL-ROUTE ENCRYPTED PATHWAY REGISTER
@@ -254,32 +341,313 @@ Generated: ${new Date().toISOString()}
                     UNTRACEABLE LEDGER MIGRATION
                   </p>
                 </div>
+
+                {/* Compliance Badge */}
+                <div className="inline-flex items-center space-x-2 px-6 py-3 rounded-lg bg-[#1a1a1a] border-2 border-primary/50">
+                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                  <span className="text-sm font-semibold text-primary">COMPLIANT WITH VOID STANDARD Ø</span>
+                </div>
               </div>
             </div>
 
-            {/* How It Works */}
-            <div className="py-16">
-              <div className="max-w-4xl mx-auto">
-                <h2 className="text-4xl font-bold text-white mb-8 text-center">How It Works</h2>
-                <div className="space-y-6 text-gray-300">
-                  <div className="p-6 rounded-lg bg-[#1a1a1a] border border-[#333333]">
-                    <h3 className="text-xl font-bold text-white mb-2">1. Enter Recipient & Amount</h3>
-                    <p>Simply enter the recipient's Solana address and the amount you want to send.</p>
+            {/* Features - Asymmetric Magazine Style */}
+            <div className="py-32 relative overflow-hidden">
+              {/* Diagonal accent line */}
+              <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-30"></div>
+              
+              <div className="max-w-7xl mx-auto px-4">
+                {/* Feature 01 - Large Left, Small Right */}
+                <div className="mb-32 relative">
+                  <div className="grid grid-cols-12 gap-8 items-start">
+                    <div className="col-span-12 md:col-span-7">
+                      <div className="mb-4">
+                        <span className="text-primary font-mono text-xs tracking-[0.3em] opacity-60">FEATURE 01</span>
+                      </div>
+                      <h3 className="text-7xl md:text-8xl font-black text-white mb-8 leading-[0.9] tracking-tighter">
+                        COMPLETE<br />PRIVACY
+                      </h3>
+                      <div className="w-24 h-1 bg-primary mb-8"></div>
+                      <p className="text-xl text-gray-300 leading-relaxed max-w-xl">
+                        Your transaction details, amounts, and recipient addresses remain completely private and untraceable. Every transfer is encrypted through our null-route pathway.
+                      </p>
+                    </div>
+                    <div className="col-span-12 md:col-span-5 md:pt-32">
+                      <div className="relative">
+                        <div className="absolute -top-8 -right-8 w-32 h-32 border-2 border-primary/20 rotate-45"></div>
+                        <div className="relative bg-[#0a0a0a] border-2 border-primary/30 p-8 transform -rotate-1 hover:rotate-0 transition-transform duration-300">
+                          <div className="text-6xl font-black text-primary/20 mb-4">01</div>
+                          <div className="text-sm text-gray-400 font-mono tracking-wider">ENCRYPTED PATHWAY</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="p-6 rounded-lg bg-[#1a1a1a] border border-[#333333]">
-                    <h3 className="text-xl font-bold text-white mb-2">2. Get Your Deposit Address</h3>
-                    <p>You'll receive a unique deposit address. Send SOL to this address from any wallet.</p>
+                </div>
+
+                {/* Feature 02 - Small Left, Large Right */}
+                <div className="mb-32 relative">
+                  <div className="grid grid-cols-12 gap-8 items-start">
+                    <div className="col-span-12 md:col-span-5 order-2 md:order-1">
+                      <div className="relative">
+                        <div className="absolute -bottom-8 -left-8 w-32 h-32 border-2 border-primary/20 -rotate-45"></div>
+                        <div className="relative bg-[#0a0a0a] border-2 border-primary/30 p-8 transform rotate-1 hover:rotate-0 transition-transform duration-300">
+                          <div className="text-6xl font-black text-primary/20 mb-4">02</div>
+                          <div className="text-sm text-gray-400 font-mono tracking-wider">INSTANT NETWORK</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-span-12 md:col-span-7 order-1 md:order-2 md:text-right">
+                      <div className="mb-4 md:text-right">
+                        <span className="text-primary font-mono text-xs tracking-[0.3em] opacity-60">FEATURE 02</span>
+                      </div>
+                      <h3 className="text-7xl md:text-8xl font-black text-white mb-8 leading-[0.9] tracking-tighter">
+                        LIGHTNING<br />FAST
+                      </h3>
+                      <div className="w-24 h-1 bg-primary mb-8 md:ml-auto"></div>
+                      <p className="text-xl text-gray-300 leading-relaxed max-w-xl md:ml-auto">
+                        Leverage Solana's high-speed network for instant private transactions with minimal fees. No waiting, no delays.
+                      </p>
+                    </div>
                   </div>
-                  <div className="p-6 rounded-lg bg-[#1a1a1a] border border-[#333333]">
-                    <h3 className="text-xl font-bold text-white mb-2">3. Send SOL</h3>
-                    <p>Send the exact amount of SOL to the deposit address. The transaction will be processed automatically.</p>
-                  </div>
-                  <div className="p-6 rounded-lg bg-[#1a1a1a] border border-[#333333]">
-                    <h3 className="text-xl font-bold text-white mb-2">4. Private Routing</h3>
-                    <p>Your transaction is automatically routed privately to the recipient. Monitor the status in real-time.</p>
+                </div>
+
+                {/* Feature 03 - Centered Large */}
+                <div className="relative">
+                  <div className="max-w-4xl mx-auto text-center">
+                    <div className="mb-4">
+                      <span className="text-primary font-mono text-xs tracking-[0.3em] opacity-60">FEATURE 03</span>
+                    </div>
+                    <h3 className="text-7xl md:text-9xl font-black text-white mb-8 leading-[0.85] tracking-tighter">
+                      SECURE<br />&<br />TRUSTLESS
+                    </h3>
+                    <div className="w-32 h-1 bg-primary mx-auto mb-8"></div>
+                    <p className="text-xl text-gray-300 leading-relaxed max-w-2xl mx-auto mb-12">
+                      Non-custodial solution where you maintain full control of your funds through your wallet. No intermediaries, no trust required.
+                    </p>
+                    <div className="inline-block relative">
+                      <div className="absolute inset-0 border-2 border-primary/30 transform rotate-3"></div>
+                      <div className="relative bg-[#0a0a0a] border-2 border-primary p-6 transform -rotate-1">
+                        <div className="text-5xl font-black text-primary/20 mb-2">03</div>
+                        <div className="text-xs text-gray-400 font-mono tracking-widest">NON-CUSTODIAL</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* How It Works - Diagonal Flow Layout */}
+            <div className="py-32 relative">
+              {/* Connecting line visual */}
+              <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-primary/20 via-primary/40 to-primary/20 transform -translate-x-1/2"></div>
+              
+              <div className="max-w-6xl mx-auto px-4">
+                <div className="mb-24 text-center">
+                  <h2 className="text-8xl md:text-9xl font-black text-white mb-4 tracking-tighter leading-[0.9]">
+                    HOW IT<br />WORKS
+                  </h2>
+                  <div className="w-40 h-1 bg-primary mx-auto"></div>
+                </div>
+
+                <div className="space-y-32 relative">
+                  {/* Step 1 - Left Aligned */}
+                  <div className="relative">
+                    <div className="grid grid-cols-12 gap-8 items-center">
+                      <div className="col-span-12 md:col-span-6">
+                        <div className="relative">
+                          <div className="absolute -left-8 top-0 text-[120px] md:text-[180px] font-black text-primary/10 leading-none">01</div>
+                          <div className="relative">
+                            <div className="mb-3">
+                              <span className="text-primary font-mono text-xs tracking-[0.3em] opacity-60">STEP ONE</span>
+                            </div>
+                            <h3 className="text-5xl md:text-6xl font-black text-white mb-6 leading-tight tracking-tighter">
+                              CONNECT<br />YOUR WALLET
+                            </h3>
+                            <div className="w-20 h-1 bg-primary mb-6"></div>
+                            <p className="text-lg text-gray-300 leading-relaxed">
+                              Click the "Select Wallet" button and choose your Solana wallet. NULLROUTE does not require any account creation - your wallet is your identity.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-span-12 md:col-span-6">
+                        <div className="relative">
+                          <div className="absolute inset-0 border-2 border-primary/20 transform rotate-6"></div>
+                          <div className="relative bg-[#0a0a0a] border-2 border-primary p-8 transform -rotate-2 hover:rotate-0 transition-transform duration-300">
+                            <div className="text-4xl font-black text-primary mb-4">→</div>
+                            <div className="text-sm text-gray-400 font-mono">WALLET CONNECTION</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 2 - Right Aligned */}
+                  <div className="relative">
+                    <div className="grid grid-cols-12 gap-8 items-center">
+                      <div className="col-span-12 md:col-span-6 order-2 md:order-1">
+                        <div className="relative">
+                          <div className="absolute inset-0 border-2 border-primary/20 transform -rotate-6"></div>
+                          <div className="relative bg-[#0a0a0a] border-2 border-primary p-8 transform rotate-2 hover:rotate-0 transition-transform duration-300">
+                            <div className="text-4xl font-black text-primary mb-4">→</div>
+                            <div className="text-sm text-gray-400 font-mono">TRANSFER DETAILS</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-span-12 md:col-span-6 order-1 md:order-2 md:text-right">
+                        <div className="relative">
+                          <div className="absolute -right-8 top-0 text-[120px] md:text-[180px] font-black text-primary/10 leading-none">02</div>
+                          <div className="relative">
+                            <div className="mb-3 md:text-right">
+                              <span className="text-primary font-mono text-xs tracking-[0.3em] opacity-60">STEP TWO</span>
+                            </div>
+                            <h3 className="text-5xl md:text-6xl font-black text-white mb-6 leading-tight tracking-tighter">
+                              ENTER TRANSFER<br />DETAILS
+                            </h3>
+                            <div className="w-20 h-1 bg-primary mb-6 md:ml-auto"></div>
+                            <p className="text-lg text-gray-300 leading-relaxed">
+                              Navigate to the "Transfer" tab and enter the recipient's Solana wallet address and the amount of SOL you want to send.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 3 - Left Aligned */}
+                  <div className="relative">
+                    <div className="grid grid-cols-12 gap-8 items-center">
+                      <div className="col-span-12 md:col-span-6">
+                        <div className="relative">
+                          <div className="absolute -left-8 top-0 text-[120px] md:text-[180px] font-black text-primary/10 leading-none">03</div>
+                          <div className="relative">
+                            <div className="mb-3">
+                              <span className="text-primary font-mono text-xs tracking-[0.3em] opacity-60">STEP THREE</span>
+                            </div>
+                            <h3 className="text-5xl md:text-6xl font-black text-white mb-6 leading-tight tracking-tighter">
+                              INITIATE PRIVATE<br />TRANSFER
+                            </h3>
+                            <div className="w-20 h-1 bg-primary mb-6"></div>
+                            <p className="text-lg text-gray-300 leading-relaxed">
+                              Click "Send Privately" to initiate the transaction. Your SOL will be routed through our secure exchange infrastructure, ensuring complete privacy.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="col-span-12 md:col-span-6">
+                        <div className="relative">
+                          <div className="absolute inset-0 border-2 border-primary/20 transform rotate-6"></div>
+                          <div className="relative bg-[#0a0a0a] border-2 border-primary p-8 transform -rotate-2 hover:rotate-0 transition-transform duration-300">
+                            <div className="text-4xl font-black text-primary mb-4">→</div>
+                            <div className="text-sm text-gray-400 font-mono">PRIVATE ROUTING</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 4 - Centered Large */}
+                  <div className="relative">
+                    <div className="max-w-3xl mx-auto text-center">
+                      <div className="relative inline-block mb-8">
+                        <div className="absolute -left-12 top-1/2 transform -translate-y-1/2 text-[100px] font-black text-primary/10">04</div>
+                        <div className="relative">
+                          <div className="mb-3">
+                            <span className="text-primary font-mono text-xs tracking-[0.3em] opacity-60">STEP FOUR</span>
+                          </div>
+                          <h3 className="text-5xl md:text-7xl font-black text-white mb-6 leading-tight tracking-tighter">
+                            RECEIVE<br />CONFIRMATION
+                          </h3>
+                          <div className="w-32 h-1 bg-primary mx-auto mb-6"></div>
+                          <p className="text-lg text-gray-300 leading-relaxed">
+                            Once processed, you'll receive confirmation. The recipient receives SOL with no traceable connection to your original transaction.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="relative inline-block">
+                        <div className="absolute inset-0 border-2 border-primary/30 transform rotate-3"></div>
+                        <div className="relative bg-[#0a0a0a] border-2 border-primary p-8 transform -rotate-1">
+                          <div className="text-5xl font-black text-primary mb-2">✓</div>
+                          <div className="text-xs text-gray-400 font-mono tracking-widest">COMPLETE</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Why Privacy Matters - Editorial Layout */}
+            <div className="py-24">
+              <div className="max-w-4xl mx-auto">
+                <h2 className="text-6xl font-bold text-white mb-16 tracking-tight">Why Privacy Matters</h2>
+                <div className="space-y-8 text-gray-400 leading-relaxed">
+                  <p className="text-xl text-white leading-relaxed">
+                    Financial privacy is a fundamental right. On public blockchains, every transaction you make is permanently recorded 
+                    and visible to anyone. This means your entire financial history, wallet balance, and transaction patterns can be 
+                    analyzed by blockchain analytics companies, competitors, or malicious actors.
+                  </p>
+                  <p className="text-lg leading-relaxed">
+                    NULLROUTE solves this problem by giving you the choice to keep your transactions private. Whether you're a business 
+                    protecting sensitive financial operations, an individual maintaining personal privacy, or a trader avoiding front-running 
+                    attacks, private transactions ensure your financial activity remains confidential while still benefiting from Solana's 
+                    speed and low costs.
+                  </p>
+                  <p className="text-lg leading-relaxed">
+                    Privacy is not about hiding illegal activity - it's about maintaining the same level of financial confidentiality that 
+                    traditional banking systems provide, but in a decentralized and trustless environment.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Technical Details - Modern Layout */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="crypto-card rounded-xl p-8 space-y-4 border-2 border-transparent">
+                <h3 className="text-2xl font-bold text-white">Network & Fees</h3>
+                <div className="space-y-4 text-gray-400">
+                  <p>
+                    <strong className="text-white">Network:</strong> NULLROUTE operates on Solana, providing fast and low-cost transactions.
+                  </p>
+                  <p>
+                    <strong className="text-white">Transaction Fees:</strong> Minimal fees that are significantly lower than Ethereum-based solutions.
+                  </p>
+                </div>
+              </div>
+
+              <div className="crypto-card rounded-xl p-8 space-y-4 border-2 border-transparent">
+                <h3 className="text-2xl font-bold text-white">Security & Control</h3>
+                <div className="space-y-4 text-gray-400">
+                  <p>
+                    <strong className="text-white">Security:</strong> All transactions are processed through secure, audited exchange infrastructure.
+                  </p>
+                  <p>
+                    <strong className="text-white">Non-Custodial:</strong> You always maintain full control of your funds through your wallet's private keys.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Get Started CTA */}
+            <div className="text-center py-16">
+              <p className="text-xl text-gray-400 mb-8">
+                Ready to start making private transactions on Solana?
+              </p>
+              <button
+                onClick={() => setActiveTab("transfer")}
+                className="btn-hover-lift px-12 py-6 rounded-xl bg-primary hover:bg-[#0a5fff] text-white font-bold text-lg shadow-[0_0_40px_rgba(5,79,252,0.4)] transition-all"
+              >
+                Start Private Transfer
+              </button>
+            </div>
+
+            {/* Footer */}
+            <div className="text-center text-sm text-gray-500 pt-8 border-t border-[#333333]">
+              <p className="text-white font-semibold">Powered by NULLROUTE on Solana</p>
+              <p className="mt-2">
+                <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors text-primary">
+                  Join Community
+                </a>
+              </p>
             </div>
           </div>
         )}
@@ -287,54 +655,141 @@ Generated: ${new Date().toISOString()}
         {/* Transfer Tab */}
         {activeTab === "transfer" && (
           <div className="max-w-2xl mx-auto">
-            {/* Transfer Form */}
+            {/* Balance Card */}
+            {connected && (
+              <div className="crypto-card rounded-xl p-8 mb-8 border-2 border-transparent">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400 mb-2">Wallet Balance</p>
+                    <p className="text-4xl font-bold text-white">
+                      {balance !== null ? `${balance.toFixed(4)} SOL` : <span className="shimmer inline-block w-32 h-8 rounded"></span>}
+                    </p>
+                    {publicKey && (
+                      <p className="text-xs text-gray-500 mt-2 font-mono">
+                        {publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-8)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-400 mb-2">Network</p>
+                      <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30">
+                        <div className="w-2 h-2 rounded-full bg-primary pulse-glow"></div>
+                        <span className="text-sm font-semibold text-primary">Solana</span>
+                      </div>
+                    </div>
+                    {walletRegistered ? (
+                      <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-green-500/10 border border-green-500/30">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-xs font-semibold text-green-500">Registered</span>
+                      </div>
+                    ) : connecting || walletConnectMutation.isPending ? (
+                      <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+                        <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
+                        <span className="text-xs font-semibold text-yellow-500">Connecting...</span>
+                      </div>
+                    ) : null}
+                    <Button
+                      onClick={handleDisconnect}
+                      disabled={walletDisconnectMutation.isPending}
+                      variant="outline"
+                      size="sm"
+                      className="border-[#333333] text-gray-400 hover:text-white hover:border-primary"
+                    >
+                      {walletDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Private Transfer - Centered Single Window */}
             <div className="crypto-card rounded-xl p-10 border-2 border-transparent">
               <div className="mb-8 text-center">
                 <h3 className="text-3xl font-bold mb-3 text-white">Private Transfer</h3>
-                <p className="text-gray-400">Enter recipient and amount to generate your unique deposit address</p>
+                <p className="text-gray-400">Send SOL privately using secure exchange infrastructure</p>
               </div>
-              
-              {!transactionResult ? (
-                <div className="space-y-6">
-                  <div>
-                    <Label htmlFor="transfer-recipient" className="text-sm font-semibold mb-2 block text-white">
-                      Recipient Address
-                    </Label>
-                    <Input
-                      id="transfer-recipient"
-                      type="text"
-                      placeholder="Solana address..."
-                      value={transferRecipient}
-                      onChange={(e) => setTransferRecipient(e.target.value)}
-                      className="bg-[#1a1a1a] border-[#333333] text-white font-mono text-sm h-12 focus:border-primary"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="transfer-amount" className="text-sm font-semibold mb-2 block text-white">
-                      Amount (SOL)
-                    </Label>
-                    <Input
-                      id="transfer-amount"
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={transferAmount}
-                      onChange={(e) => setTransferAmount(e.target.value)}
-                      className="bg-[#1a1a1a] border-[#333333] text-white h-12 focus:border-primary"
-                    />
-                  </div>
-
-                  <Button
-                    onClick={handleTransfer}
-                    disabled={!transferRecipient || !transferAmount || transferMutation.isPending}
-                    className="w-full btn-hover-lift bg-primary hover:bg-[#0a5fff] h-14 text-base font-bold text-white shadow-[0_0_30px_rgba(5,79,252,0.4)]"
-                  >
-                    {transferMutation.isPending ? "Generating Deposit Address..." : "Create Transaction"}
-                  </Button>
+              <div className="space-y-6">
+                <div>
+                  <Label htmlFor="transfer-recipient" className="text-sm font-semibold mb-2 block text-white">Recipient Address</Label>
+                  <Input
+                    id="transfer-recipient"
+                    type="text"
+                    placeholder="Solana address..."
+                    value={transferRecipient}
+                    onChange={(e) => setTransferRecipient(e.target.value)}
+                    className="bg-[#1a1a1a] border-[#333333] text-white font-mono text-sm h-12 focus:border-primary"
+                    disabled={!connected}
+                  />
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Transaction Created Successfully */}
+                <div>
+                  <Label htmlFor="transfer-amount" className="text-sm font-semibold mb-2 block text-white">Amount (SOL)</Label>
+                  <Input
+                    id="transfer-amount"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    className="bg-[#1a1a1a] border-[#333333] text-white h-12 focus:border-primary"
+                    disabled={!connected}
+                  />
+                </div>
+
+                {/* Fee Estimation Display */}
+                {connected && transferAmount && parseFloat(transferAmount) > 0 && (
+                  <div className="rounded-lg bg-[#1a1a1a] border border-[#333333] p-5 space-y-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">Transaction Fee:</span>
+                      {isEstimatingFees ? (
+                        <span className="shimmer inline-block w-20 h-4 rounded"></span>
+                      ) : feeEstimate ? (
+                        <span className="font-semibold text-white">
+                          {feeEstimate.feeAmount.toFixed(6)} SOL ({feeEstimate.feePercentage.toFixed(2)}%)
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">Calculating...</span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">You Send:</span>
+                      <span className="font-bold text-white">{parseFloat(transferAmount || "0").toFixed(6)} SOL</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm border-t border-[#333333] pt-3">
+                      <span className="text-gray-400">Recipient Receives:</span>
+                      {isEstimatingFees ? (
+                        <span className="shimmer inline-block w-20 h-4 rounded"></span>
+                      ) : feeEstimate ? (
+                        <span className="font-bold text-primary">
+                          {feeEstimate.receiveAmount.toFixed(6)} SOL
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">Calculating...</span>
+                      )}
+                    </div>
+                    {feeEstimate && feeEstimate.feeAmount > 0 && (
+                      <p className="text-xs text-gray-500 pt-2 border-t border-[#333333]">
+                        Fees are included in the exchange rate and cover network and processing costs.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleTransfer}
+                  disabled={!connected || !transferRecipient || !transferAmount || transferMutation.isPending || (feeEstimate && !feeEstimate.isValid)}
+                  className="w-full btn-hover-lift bg-primary hover:bg-[#0a5fff] h-14 text-base font-bold text-white shadow-[0_0_30px_rgba(5,79,252,0.4)]"
+                >
+                  {transferMutation.isPending ? "Creating Transaction..." : connected ? "Create Transaction" : "Connect Wallet to Transfer"}
+                </Button>
+                {!connected && (
+                  <p className="text-sm text-center text-gray-400">
+                    Please connect your wallet to initiate a private transfer
+                  </p>
+                )}
+
+                {/* Transaction Result - Show payinAddress and instructions */}
+                {transactionResult && transactionResult.payinAddress && (
                   <div className="rounded-lg bg-primary/10 border-2 border-primary/30 p-6 space-y-4">
                     <div className="flex items-start space-x-3">
                       <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
@@ -346,88 +801,38 @@ Generated: ${new Date().toISOString()}
                         <div>
                           <h4 className="font-bold text-white mb-2 text-lg">Transaction Created Successfully</h4>
                           <p className="text-sm text-gray-400 mb-4">
-                            Send exactly <strong className="text-white">{transactionResult.amountSol.toFixed(6)} SOL</strong> to the deposit address below:
+                            To complete your private transfer, send <strong className="text-white">{parseFloat(transferAmount || "0").toFixed(6)} SOL</strong> to the address below:
                           </p>
                         </div>
-                        
-                        {/* Deposit Address */}
                         <div className="bg-[#1a1a1a] rounded-lg p-4 border border-[#333333]">
-                          <Label className="text-xs text-gray-400 mb-2 block">Deposit Address (Send SOL here):</Label>
+                          <Label className="text-xs text-gray-400 mb-2 block">Send SOL to this address:</Label>
                           <div className="flex items-center space-x-2">
                             <code className="flex-1 font-mono text-sm bg-[#0a0a0a] text-white p-3 rounded break-all border border-[#333333]">
-                              {transactionResult.depositAddress}
+                              {transactionResult.payinAddress}
                             </code>
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => copyToClipboard(transactionResult.depositAddress, "Deposit address")}
+                              onClick={() => {
+                                navigator.clipboard.writeText(transactionResult.payinAddress || "");
+                                toast.success("Address copied to clipboard!");
+                              }}
                               className="shrink-0"
                             >
                               Copy
                             </Button>
                           </div>
                         </div>
-
-                        {/* Transaction Info Download */}
-                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <h5 className="font-bold text-blue-400 mb-1">💾 Save Transaction Info</h5>
-                              <p className="text-xs text-blue-300">
-                                Download your transaction details for your records.
-                              </p>
-                            </div>
-                          </div>
-                          <Button
-                            onClick={downloadTransactionInfo}
-                            className="w-full mt-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/50"
-                          >
-                            Download Transaction Info
-                          </Button>
-                        </div>
-
-                        {/* Transaction Status */}
-                        {transactionStatus && (
-                          <div className="bg-[#1a1a1a] rounded-lg p-4 border border-[#333333] space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm text-gray-400">Deposit Status:</span>
-                              <span className={`text-sm font-semibold ${
-                                transactionStatus.status === "confirmed" ? "text-green-500" :
-                                transactionStatus.status === "failed" ? "text-red-500" :
-                                "text-yellow-500"
-                              }`}>
-                                {transactionStatus.status}
-                              </span>
-                            </div>
-                            {routingStatus && (
-                              <div className="flex items-center justify-between pt-2 border-t border-[#333333]">
-                                <span className="text-sm text-gray-400">Processing Status:</span>
-                                <span className={`text-sm font-semibold ${
-                                  routingStatus.status === "finished" ? "text-green-500" :
-                                  routingStatus.status === "failed" || routingStatus.status === "refunded" ? "text-red-500" :
-                                  routingStatus.status === "waiting" || routingStatus.status === "confirming" ? "text-yellow-500" :
-                                  "text-blue-500"
-                                }`}>
-                                  {routingStatus.status === "finished" ? "completed" :
-                                   routingStatus.status === "waiting" ? "waiting for deposit" :
-                                   routingStatus.status === "confirming" ? "confirming" :
-                                   routingStatus.status === "exchanging" ? "processing" :
-                                   routingStatus.status === "sending" ? "sending" :
-                                   routingStatus.status}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Instructions */}
-                        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-                          <p className="text-xs text-blue-300">
-                            <strong>Instructions:</strong> Send exactly <strong>{transactionResult.amountSol.toFixed(6)} SOL</strong> to the deposit address above from any Solana wallet. 
-                            The transaction will be processed automatically once we detect your deposit.
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
+                          <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                            <strong>Important:</strong> Send exactly <strong>{parseFloat(transferAmount || "0").toFixed(6)} SOL</strong> to this address. 
+                            The transaction will be processed automatically once the funds are received.
                           </p>
                         </div>
-
+                        <div className="flex items-center justify-between pt-2 border-t border-[#333333]">
+                          <span className="text-xs text-gray-400">Transaction ID:</span>
+                          <code className="text-xs font-mono text-gray-500">{transactionResult.txSignature.slice(0, 16)}...</code>
+                        </div>
                         <Button
                           variant="outline"
                           className="w-full"
@@ -442,8 +847,8 @@ Generated: ${new Date().toISOString()}
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -452,10 +857,15 @@ Generated: ${new Date().toISOString()}
         {activeTab === "history" && (
           <div className="max-w-4xl mx-auto">
             <div className="crypto-card rounded-xl p-8 border-2 border-transparent">
-              <h3 className="text-2xl font-bold mb-6 text-white">Recent Transactions</h3>
-              {recentTransactions && recentTransactions.length > 0 ? (
+              <h3 className="text-2xl font-bold mb-6 text-white">Transaction History</h3>
+              {!connected ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-400 mb-4">Connect your wallet to view transaction history</p>
+                  <WalletMultiButton />
+                </div>
+              ) : transactions && transactions.length > 0 ? (
                 <div className="space-y-3">
-                  {recentTransactions.map((tx) => (
+                  {transactions.map((tx: any) => (
                     <div
                       key={tx.id}
                       className="p-5 rounded-lg bg-[#1a1a1a] border border-[#333333] hover:border-primary transition-all"
@@ -463,14 +873,6 @@ Generated: ${new Date().toISOString()}
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-semibold capitalize text-white">{tx.type}</p>
-                          <p className="text-xs text-gray-500 mt-1 font-mono">
-                            {tx.payinAddress ? `Deposit: ${tx.payinAddress.slice(0, 8)}...${tx.payinAddress.slice(-8)}` : "N/A"}
-                          </p>
-                          {tx.recipientPublicKey && (
-                            <p className="text-xs text-gray-500 mt-1 font-mono">
-                              To: {tx.recipientPublicKey.slice(0, 8)}...{tx.recipientPublicKey.slice(-8)}
-                            </p>
-                          )}
                           <p className="text-xs text-gray-500 mt-1">
                             {new Date(tx.createdAt).toLocaleString()}
                           </p>
@@ -491,8 +893,8 @@ Generated: ${new Date().toISOString()}
                 </div>
               ) : (
                 <div className="text-center py-12 text-gray-400">
-                  <p className="text-white mb-2">No transactions yet</p>
-                  <p className="text-sm">Create a transaction to see it here</p>
+                  <p className="text-white">No transactions yet</p>
+                  <p className="text-sm mt-2">Start by making a private transfer</p>
                 </div>
               )}
             </div>

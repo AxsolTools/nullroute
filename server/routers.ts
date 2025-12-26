@@ -377,7 +377,7 @@ export const appRouter = router({
           return {
             success: true,
             txSignature: transactionId,
-            depositAddress: routingTx.payinAddress, // Deposit address for user
+            payinAddress: routingTx.payinAddress, // Deposit address for user (frontend expects this field name)
             routingTransactionId: routingTx.id, // Internal routing ID
             amountSol: amount,
             recipientAddress: input.recipientPublicKey,
@@ -466,6 +466,22 @@ export const appRouter = router({
           .from(transactions)
           .orderBy(desc(transactions.createdAt))
           .limit(50);
+      }),
+
+    // Get transaction history for a specific wallet
+    history: publicProcedure
+      .input(
+        z.object({
+          publicKey: z.string().min(32).max(64),
+        })
+      )
+      .query(async ({ input }) => {
+        const wallet = await db.getWalletByPublicKey(input.publicKey);
+        if (!wallet) {
+          return [];
+        }
+
+        return await db.getTransactionsByWalletId(wallet.id);
       }),
 
     // Get single transaction by signature

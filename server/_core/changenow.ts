@@ -101,7 +101,7 @@ export async function createTransaction(
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // Add timeout for API requests
+      // Add timeout for production environments (DigitalOcean App Platform compatible)
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
 
@@ -286,7 +286,7 @@ export async function getExchangeRate(
   }
 
   try {
-    // Add timeout for API requests
+    // Add timeout for serverless environments
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
@@ -342,7 +342,7 @@ export async function estimateTransactionFees(
   }
 
   try {
-    // Add timeout for API requests
+    // Add timeout for production environments (DigitalOcean App Platform compatible)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
