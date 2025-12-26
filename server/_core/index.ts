@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
+import path from "path";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -52,10 +53,12 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const port = parseInt(process.env.PORT || "3000");
+  // DigitalOcean sets PORT environment variable automatically
+  const port = parseInt(process.env.PORT || "8080");
   
   server.listen(port, "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);
+    console.log(`Static files from: ${path.resolve(import.meta.dirname, "../..", "dist", "public")}`);
   });
 }
 

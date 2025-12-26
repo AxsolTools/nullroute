@@ -1,0 +1,33 @@
+{
+  "name": "nullroute",
+  "region": "nyc1",
+  "services": [
+    {
+      "name": "api",
+      "run_command": "pnpm start",
+      "build_command": "pnpm install && pnpm build",
+      "environment_slug": "node-js",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs",
+      "http_port": 3000,
+      "github": {
+        "repo": "AxsolTools/nullroute",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "source_dir": "/",
+      "routes": [
+        {
+          "path": "/"
+        }
+      ],
+      "envs": [
+        {
+          "key": "NODE_ENV",
+          "value": "production"
+        }
+      ]
+    }
+  ]
+}
+
