@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "buildCommand": "pnpm install && pnpm build && pnpm build:api-bundle",
+  "outputDirectory": "dist/public",
+  "installCommand": "pnpm install",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/((?!api).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/trpc/[trpc].mjs": {
+      "maxDuration": 30
+    }
+  }
+}

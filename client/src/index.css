@@ -1,0 +1,340 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+:root {
+  /* Pure black and white with #054ffc blue accent */
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #0a0a0a;
+  --card-foreground: #ffffff;
+  --popover: #0a0a0a;
+  --popover-foreground: #ffffff;
+  --primary: #054ffc;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ffffff;
+  --muted: #1a1a1a;
+  --muted-foreground: #999999;
+  --accent: #054ffc;
+  --accent-foreground: #ffffff;
+  --destructive: #ff4444;
+  --destructive-foreground: #ffffff;
+  --border: #333333;
+  --input: #1a1a1a;
+  --ring: #054ffc;
+  --radius: 0.75rem;
+  
+  /* Custom colors */
+  --neon-blue: #054ffc;
+  --neon-cyan: #054ffc;
+  --neon-purple: #054ffc;
+  --electric-green: #054ffc;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+}
+
+@layer components {
+  /* Pure black background */
+  .gradient-bg {
+    background: #000000;
+  }
+
+  /* Modern card with blue accent */
+  .crypto-card {
+    background: #0a0a0a;
+    border: 1px solid #333333;
+    box-shadow: 
+      0 4px 6px -1px rgba(0, 0, 0, 0.5),
+      0 2px 4px -2px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .crypto-card:hover {
+    border-color: #054ffc;
+    box-shadow: 
+      0 10px 15px -3px rgba(0, 0, 0, 0.6),
+      0 4px 6px -4px rgba(0, 0, 0, 0.6),
+      0 0 40px rgba(5, 79, 252, 0.3);
+    transform: translateY(-2px);
+  }
+
+  /* Blue glow effects */
+  .neon-glow {
+    box-shadow: 
+      0 0 20px rgba(5, 79, 252, 0.4),
+      0 0 40px rgba(5, 79, 252, 0.25),
+      0 0 60px rgba(5, 79, 252, 0.15);
+  }
+
+  .neon-glow-purple {
+    box-shadow: 
+      0 0 20px rgba(5, 79, 252, 0.4),
+      0 0 40px rgba(5, 79, 252, 0.25);
+  }
+
+  .neon-text {
+    text-shadow: 
+      0 0 10px rgba(5, 79, 252, 0.8),
+      0 0 20px rgba(5, 79, 252, 0.6),
+      0 0 30px rgba(5, 79, 252, 0.4);
+  }
+
+  /* Blue gradient text */
+  .gradient-text {
+    color: #054ffc;
+    text-shadow: 0 0 20px rgba(5, 79, 252, 0.5);
+  }
+
+  @keyframes gradient-shift {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  /* Pulse glow animation */
+  .pulse-glow {
+    animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(5, 79, 252, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 40px rgba(5, 79, 252, 0.6);
+    }
+  }
+
+  /* Button hover lift */
+  .btn-hover-lift {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-hover-lift:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px -5px rgba(5, 79, 252, 0.5);
+  }
+
+  .btn-hover-lift:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  /* Glass effect */
+  .glass-effect {
+    background: rgba(10, 10, 10, 0.8);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(51, 51, 51, 0.5);
+    box-shadow: 
+      0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  /* Shimmer loading */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      #1a1a1a 0%,
+      rgba(5, 79, 252, 0.3) 50%,
+      #1a1a1a 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #000000;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #1a1a1a;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #054ffc;
+  }
+
+  /* Container utility */
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      padding-left: 2rem;
+      padding-right: 2rem;
+      max-width: 1280px;
+    }
+  }
+}
+
+/* Wallet Adapter Custom Styles */
+.wallet-adapter-button {
+  background: #054ffc !important;
+  border: 1px solid #054ffc !important;
+  border-radius: 0.75rem !important;
+  font-family: 'Space Grotesk', sans-serif !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  letter-spacing: 0.02em !important;
+  padding: 0.75rem 1.5rem !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(5, 79, 252, 0.4) !important;
+  text-transform: none !important;
+}
+
+.wallet-adapter-button:not(:disabled):hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 
+    0 10px 20px -5px rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(5, 79, 252, 0.6) !important;
+  border-color: #054ffc !important;
+  background: #0a5fff !important;
+}
+
+.wallet-adapter-button:not(:disabled):active {
+  transform: translateY(0) !important;
+}
+
+.wallet-adapter-button-trigger {
+  background: #054ffc !important;
+}
+
+.wallet-adapter-modal-wrapper {
+  background: rgba(0, 0, 0, 0.95) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.wallet-adapter-modal {
+  background: #0a0a0a !important;
+  border: 1px solid #333333 !important;
+  border-radius: 1rem !important;
+  box-shadow: 
+    0 20px 25px -5px rgba(0, 0, 0, 0.6),
+    0 0 60px rgba(5, 79, 252, 0.3) !important;
+}
+
+.wallet-adapter-modal-title {
+  font-family: 'Space Grotesk', sans-serif !important;
+  color: #ffffff !important;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+}
+
+.wallet-adapter-modal-list {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.wallet-adapter-modal-list-item {
+  background: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+  border-radius: 0.75rem !important;
+  transition: all 0.2s !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.wallet-adapter-modal-list-item:hover {
+  background: #1a1a1a !important;
+  border-color: #054ffc !important;
+  transform: translateX(4px) !important;
+  box-shadow: 0 0 20px rgba(5, 79, 252, 0.2) !important;
+}
+
+.wallet-adapter-modal-list-item img {
+  border-radius: 0.5rem !important;
+}
