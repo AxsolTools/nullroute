@@ -1,6 +1,3 @@
-import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { Connection } from "@solana/web3.js";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -12,103 +9,15 @@ import { COMMUNITY_URL, APP_LOGO } from "@/const";
 
 export default function Home() {
   const [, setLocation] = useLocation();
-  const { publicKey, connected, connecting, disconnect } = useWallet();
-  const [balance, setBalance] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"transfer" | "history" | "about">("about");
   const [transferRecipient, setTransferRecipient] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
-  const [walletRegistered, setWalletRegistered] = useState(false);
 
   const handleLogoClick = () => {
     setLocation("/");
     setActiveTab("about");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  const connection = new Connection("https://api.devnet.solana.com");
-
-  // Register wallet in backend when connected
-  const walletConnectMutation = trpc.wallet.connect.useMutation({
-    onSuccess: () => {
-      setWalletRegistered(true);
-      console.log("Wallet registered in backend");
-    },
-    onError: (error) => {
-      console.error("Failed to register wallet:", error);
-      const errorMessage = error.message || "Failed to register wallet";
-      
-      // Show more specific error messages
-      if (errorMessage.includes("Database") || errorMessage.includes("DATABASE_URL")) {
-        toast.error("Database connection issue. Please contact support or try again later.");
-      } else if (errorMessage.includes("Invalid Solana public key")) {
-        toast.error("Invalid wallet address. Please reconnect your wallet.");
-      } else if (errorMessage.includes("Unexpected end of JSON input") || errorMessage.includes("json")) {
-        toast.error("Server error: Invalid response. Please try again or contact support.");
-      } else {
-        toast.error(`Failed to register wallet: ${errorMessage}`);
-      }
-      
-      setWalletRegistered(false);
-    },
-  });
-
-  // Disconnect wallet mutation
-  const walletDisconnectMutation = trpc.wallet.disconnect.useMutation({
-    onSuccess: () => {
-      setWalletRegistered(false);
-      disconnect();
-      toast.success("Wallet disconnected");
-    },
-    onError: (error) => {
-      console.error("Failed to disconnect wallet:", error);
-      toast.error(`Failed to disconnect: ${error.message || "Unknown error"}`);
-    },
-  });
-
-  const handleDisconnect = async () => {
-    if (publicKey) {
-      try {
-        await walletDisconnectMutation.mutateAsync({ publicKey: publicKey.toBase58() });
-      } catch (error) {
-        // Error already handled in mutation
-      }
-    } else {
-      disconnect();
-    }
-  };
-
-  // Register wallet when it connects
-  useEffect(() => {
-    if (publicKey && connected && !walletRegistered && !walletConnectMutation.isPending) {
-      const publicKeyStr = publicKey.toBase58();
-      console.log("Registering wallet in backend:", publicKeyStr);
-      walletConnectMutation.mutate({ publicKey: publicKeyStr });
-    } else if (!connected) {
-      setWalletRegistered(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [publicKey, connected, walletRegistered]);
-
-  // Fetch wallet balance
-  useEffect(() => {
-    if (publicKey && connected) {
-      connection.getBalance(publicKey).then((bal) => {
-        setBalance(bal / 1e9);
-      }).catch((error) => {
-        console.error("Failed to fetch balance:", error);
-        setBalance(null);
-      });
-    } else {
-      setBalance(null);
-    }
-  }, [publicKey, connected]);
-
-  const { data: transactions } = trpc.transaction.history.useQuery(
-    { publicKey: publicKey?.toBase58() || "" },
-    {
-      enabled: connected && !!publicKey,
-    }
-  );
 
   // Estimate fees when amount changes (with debouncing)
   const [debouncedAmount, setDebouncedAmount] = useState("");
@@ -124,7 +33,7 @@ export default function Home() {
   const { data: feeEstimate, isLoading: isEstimatingFees } = trpc.transaction.estimateFees.useQuery(
     { amountSol: debouncedAmount },
     {
-      enabled: connected && !!debouncedAmount && parseFloat(debouncedAmount) > 0 && !isNaN(parseFloat(debouncedAmount)),
+      enabled: !!debouncedAmount && parseFloat(debouncedAmount) > 0 && !isNaN(parseFloat(debouncedAmount)),
       refetchOnWindowFocus: false,
     }
   );
@@ -149,16 +58,6 @@ export default function Home() {
   });
 
   const handleTransfer = () => {
-    if (!publicKey) {
-      toast.error("Please connect your wallet first");
-      return;
-    }
-
-    if (!walletRegistered) {
-      toast.error("Wallet not registered. Please wait for connection to complete.");
-      return;
-    }
-
     // Validate inputs
     if (!transferRecipient || transferRecipient.trim().length === 0) {
       toast.error("Please enter a recipient address");
@@ -167,12 +66,6 @@ export default function Home() {
 
     if (!transferAmount || parseFloat(transferAmount) <= 0) {
       toast.error("Please enter a valid amount");
-      return;
-    }
-
-    const amount = parseFloat(transferAmount);
-    if (balance !== null && amount > balance) {
-      toast.error("Insufficient balance");
       return;
     }
 
@@ -243,17 +136,6 @@ export default function Home() {
               >
                 Community
               </a>
-              {connected && (
-                <Button
-                  onClick={handleDisconnect}
-                  disabled={walletDisconnectMutation.isPending}
-                  variant="outline"
-                  className="hidden sm:flex border-[#333333] text-gray-400 hover:text-white hover:border-primary"
-                >
-                  {walletDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
-                </Button>
-              )}
-              <WalletMultiButton />
             </div>
           </div>
         </div>
@@ -655,54 +537,6 @@ export default function Home() {
         {/* Transfer Tab */}
         {activeTab === "transfer" && (
           <div className="max-w-2xl mx-auto">
-            {/* Balance Card */}
-            {connected && (
-              <div className="crypto-card rounded-xl p-8 mb-8 border-2 border-transparent">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-400 mb-2">Wallet Balance</p>
-                    <p className="text-4xl font-bold text-white">
-                      {balance !== null ? `${balance.toFixed(4)} SOL` : <span className="shimmer inline-block w-32 h-8 rounded"></span>}
-                    </p>
-                    {publicKey && (
-                      <p className="text-xs text-gray-500 mt-2 font-mono">
-                        {publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-8)}
-                      </p>
-                    )}
-                  </div>
-                  <div className="text-right space-y-3">
-                    <div>
-                      <p className="text-sm text-gray-400 mb-2">Network</p>
-                      <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30">
-                        <div className="w-2 h-2 rounded-full bg-primary pulse-glow"></div>
-                        <span className="text-sm font-semibold text-primary">Solana</span>
-                      </div>
-                    </div>
-                    {walletRegistered ? (
-                      <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-green-500/10 border border-green-500/30">
-                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                        <span className="text-xs font-semibold text-green-500">Registered</span>
-                      </div>
-                    ) : connecting || walletConnectMutation.isPending ? (
-                      <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                        <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
-                        <span className="text-xs font-semibold text-yellow-500">Connecting...</span>
-                      </div>
-                    ) : null}
-                    <Button
-                      onClick={handleDisconnect}
-                      disabled={walletDisconnectMutation.isPending}
-                      variant="outline"
-                      size="sm"
-                      className="border-[#333333] text-gray-400 hover:text-white hover:border-primary"
-                    >
-                      {walletDisconnectMutation.isPending ? "Disconnecting..." : "Disconnect"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Private Transfer - Centered Single Window */}
             <div className="crypto-card rounded-xl p-10 border-2 border-transparent">
               <div className="mb-8 text-center">
@@ -719,7 +553,6 @@ export default function Home() {
                     value={transferRecipient}
                     onChange={(e) => setTransferRecipient(e.target.value)}
                     className="bg-[#1a1a1a] border-[#333333] text-white font-mono text-sm h-12 focus:border-primary"
-                    disabled={!connected}
                   />
                 </div>
                 <div>
@@ -732,12 +565,11 @@ export default function Home() {
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
                     className="bg-[#1a1a1a] border-[#333333] text-white h-12 focus:border-primary"
-                    disabled={!connected}
                   />
                 </div>
 
                 {/* Fee Estimation Display */}
-                {connected && transferAmount && parseFloat(transferAmount) > 0 && (
+                {transferAmount && parseFloat(transferAmount) > 0 && (
                   <div className="rounded-lg bg-[#1a1a1a] border border-[#333333] p-5 space-y-3">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-400">Transaction Fee:</span>
@@ -777,16 +609,11 @@ export default function Home() {
 
                 <Button
                   onClick={handleTransfer}
-                  disabled={!connected || !transferRecipient || !transferAmount || transferMutation.isPending || (feeEstimate && !feeEstimate.isValid)}
+                  disabled={!transferRecipient || !transferAmount || transferMutation.isPending || (feeEstimate && !feeEstimate.isValid)}
                   className="w-full btn-hover-lift bg-primary hover:bg-[#0a5fff] h-14 text-base font-bold text-white shadow-[0_0_30px_rgba(5,79,252,0.4)]"
                 >
-                  {transferMutation.isPending ? "Creating Transaction..." : connected ? "Create Transaction" : "Connect Wallet to Transfer"}
+                  {transferMutation.isPending ? "Creating Transaction..." : "Create Transaction"}
                 </Button>
-                {!connected && (
-                  <p className="text-sm text-center text-gray-400">
-                    Please connect your wallet to initiate a private transfer
-                  </p>
-                )}
 
                 {/* Transaction Result - Show payinAddress and instructions */}
                 {transactionResult && transactionResult.payinAddress && (
@@ -858,45 +685,10 @@ export default function Home() {
           <div className="max-w-4xl mx-auto">
             <div className="crypto-card rounded-xl p-8 border-2 border-transparent">
               <h3 className="text-2xl font-bold mb-6 text-white">Transaction History</h3>
-              {!connected ? (
-                <div className="text-center py-12">
-                  <p className="text-gray-400 mb-4">Connect your wallet to view transaction history</p>
-                  <WalletMultiButton />
-                </div>
-              ) : transactions && transactions.length > 0 ? (
-                <div className="space-y-3">
-                  {transactions.map((tx: any) => (
-                    <div
-                      key={tx.id}
-                      className="p-5 rounded-lg bg-[#1a1a1a] border border-[#333333] hover:border-primary transition-all"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-semibold capitalize text-white">{tx.type}</p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {new Date(tx.createdAt).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-white">{parseFloat(tx.amountSol).toFixed(4)} SOL</p>
-                          <p className={`text-xs font-semibold mt-1 ${
-                            tx.status === "confirmed" ? "text-green-500" :
-                            tx.status === "failed" ? "text-red-500" :
-                            "text-yellow-500"
-                          }`}>
-                            {tx.status}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 text-gray-400">
-                  <p className="text-white">No transactions yet</p>
-                  <p className="text-sm mt-2">Start by making a private transfer</p>
-                </div>
-              )}
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-white">Transaction history is not available</p>
+                <p className="text-sm mt-2">Start by making a private transfer</p>
+              </div>
             </div>
           </div>
         )}
