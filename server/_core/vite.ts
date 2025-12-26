@@ -3,8 +3,13 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 import { createServer as createViteServer } from "vite";
 import viteConfig from "../../vite.config";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
@@ -26,7 +31,7 @@ export async function setupVite(app: Express, server: Server) {
 
     try {
       const clientTemplate = path.resolve(
-        import.meta.dirname,
+        __dirname,
         "../..",
         "client",
         "index.html"
@@ -48,12 +53,26 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "../..", "dist", "public");
+  // Use __dirname for reliable path resolution in bundled code
+  const distPath = path.resolve(__dirname, "../..", "dist", "public");
+  
+  console.log(`[Static] Serving from: ${distPath}`);
+  console.log(`[Static] Directory exists: ${fs.existsSync(distPath)}`);
   
   if (!fs.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
+    // Try alternative path (in case bundling changes structure)
+    const altPath = path.resolve(process.cwd(), "dist", "public");
+    console.log(`[Static] Trying alternative path: ${altPath}`);
+    if (fs.existsSync(altPath)) {
+      app.use(express.static(altPath));
+      app.use("*", (_req, res) => {
+        res.sendFile(path.resolve(altPath, "index.html"));
+      });
+      return;
+    }
     return;
   }
 

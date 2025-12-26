@@ -58,7 +58,7 @@ async function startServer() {
   
   server.listen(port, "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);
-    console.log(`Static files from: ${path.resolve(import.meta.dirname, "../..", "dist", "public")}`);
+    console.log(`Working directory: ${process.cwd()}`);
   });
 }
 
