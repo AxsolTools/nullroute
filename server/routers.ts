@@ -317,28 +317,14 @@ export const appRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         try {
-          // Some environments (proxies/CDN) can strip or stringify the body; attempt to recover the raw input from the batch request for better resilience.
-          const parsePossibleJson = (value: unknown) => {
-            if (typeof value === "string") {
-              try {
-                return JSON.parse(value);
-              } catch {
-                return undefined;
-              }
-            }
-            return value;
-          };
+          // tRPC v11 batch format: {"0": {"json": {recipientPublicKey, amountSol}}}
+          // If input is undefined, try to recover from raw body
+          const rawBody = (ctx.req as any)?.body;
+          const batchInput = rawBody?.["0"]?.json;
+          const payload = input ?? batchInput;
 
-          const rawBody = parsePossibleJson((ctx.req as any)?.body);
-          const rawInput =
-            Array.isArray(rawBody) && rawBody.length > 0
-              ? rawBody[0]?.params?.input
-              : rawBody?.input;
-
-          const payload = input ?? rawInput;
-
-          if (!payload) {
-            console.error("[Transfer] Missing payload. Raw body:", (ctx.req as any)?.body);
+          if (!payload || !payload.recipientPublicKey || !payload.amountSol) {
+            console.error("[Transfer] Missing payload. input:", input, "batchInput:", batchInput, "rawBody keys:", rawBody ? Object.keys(rawBody) : "no body");
             throw new TRPCError({
               code: "BAD_REQUEST",
               message: "Missing transfer payload (recipientPublicKey, amountSol)",

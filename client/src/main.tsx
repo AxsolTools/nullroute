@@ -42,44 +42,11 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
+      // Let tRPC handle errors natively - don't intercept responses
       fetch(input, init) {
         return globalThis.fetch(input, {
           ...(init ?? {}),
           credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            ...(init?.headers || {}),
-          },
-        }).then(async (response) => {
-          // Check if response is ok
-          if (!response.ok) {
-            // Clone response to read error message without consuming body
-            const clonedResponse = response.clone();
-            const text = await clonedResponse.text().catch(() => "");
-            const errorMessage = text || response.statusText;
-            console.error(`[tRPC] HTTP ${response.status} error:`, errorMessage);
-            throw new Error(`HTTP ${response.status}: ${errorMessage}`);
-          }
-          
-          // Check if response has content type
-          const contentType = response.headers.get("content-type");
-          if (contentType && !contentType.includes("application/json")) {
-            // Clone to read without consuming
-            const clonedResponse = response.clone();
-            const text = await clonedResponse.text().catch(() => "");
-            console.error(`[tRPC] Invalid content type: ${contentType}, response:`, text.substring(0, 200));
-            throw new Error(`Invalid response format: Expected JSON, got ${contentType}`);
-          }
-          
-          // Return the original response for tRPC to process
-          return response;
-        }).catch((error) => {
-          // Enhanced error logging
-          console.error("[tRPC] Fetch error:", error);
-          if (error instanceof TypeError && error.message.includes("fetch")) {
-            throw new Error("Network error: Unable to reach server. Please check your connection.");
-          }
-          throw error;
         });
       },
     }),

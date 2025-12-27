@@ -38,8 +38,11 @@ async function startServer() {
     console.log("[Server] ✓ ChangeNow API key is configured");
   }
   
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
+  // Configure body parser with larger size limit and explicit content types
+  app.use(express.json({ 
+    limit: "50mb",
+    type: ["application/json", "application/json; charset=utf-8"]
+  }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   
   // CORS headers for all routes
@@ -72,6 +75,17 @@ async function startServer() {
     console.error("[Server] Failed to initialize transaction monitor:", error);
   }
   
+  // Diagnostic logging for tRPC requests (helps debug POST body issues)
+  app.use("/api/trpc", (req, _res, next) => {
+    if (req.method === "POST") {
+      console.log("[tRPC Debug] Method:", req.method);
+      console.log("[tRPC Debug] URL:", req.url);
+      console.log("[tRPC Debug] Content-Type:", req.headers["content-type"]);
+      console.log("[tRPC Debug] Body:", JSON.stringify(req.body));
+    }
+    next();
+  });
+
   // tRPC API - mount using app.use for proper path handling
   app.use("/api/trpc", createExpressMiddleware({
     router: appRouter,
