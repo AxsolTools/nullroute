@@ -64,7 +64,7 @@ export async function createTransaction(
 ): Promise<ChangeNowTransactionResponse> {
   const apiKey = process.env.CHANGENOW_API_KEY;
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === "") {
-    throw new Error("ChangeNow API key is not configured. Please set CHANGENOW_API_KEY environment variable.");
+    throw new Error("Exchange API key is not configured. Please set CHANGENOW_API_KEY environment variable.");
   }
 
   const url = `${CHANGENOW_API_URL}/exchange`;
@@ -204,7 +204,7 @@ export async function getTransactionStatus(
 ): Promise<ChangeNowTransactionStatus> {
   const apiKey = process.env.CHANGENOW_API_KEY;
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === "") {
-    throw new Error("ChangeNow API key is not configured");
+    throw new Error("Exchange API key is not configured");
   }
 
   const url = `${CHANGENOW_API_URL}/exchange/by-id/${transactionId}`;
@@ -218,10 +218,9 @@ export async function getTransactionStatus(
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.message || `ChangeNow API error: ${response.status} ${response.statusText}`
-      );
+      // Don't expose provider name in error messages
+      console.error("[Exchange] Status check failed:", response.status, response.statusText);
+      throw new Error(`Transaction status unavailable (${response.status})`);
     }
 
     const data = await response.json();
@@ -230,7 +229,7 @@ export async function getTransactionStatus(
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error("Failed to get ChangeNow transaction status");
+    throw new Error("Failed to get transaction status");
   }
 }
 
@@ -240,7 +239,7 @@ export async function getTransactionStatus(
 export async function getAvailableCurrencies(): Promise<any[]> {
   const apiKey = process.env.CHANGENOW_API_KEY;
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === "") {
-    throw new Error("ChangeNow API key is not configured");
+    throw new Error("Exchange API key is not configured");
   }
 
   const url = `${CHANGENOW_API_URL}/exchange/currencies`;
@@ -254,7 +253,7 @@ export async function getAvailableCurrencies(): Promise<any[]> {
     });
 
     if (!response.ok) {
-      throw new Error(`ChangeNow API error: ${response.status}`);
+      throw new Error(`Exchange API error: ${response.status}`);
     }
 
     const data = await response.json();
@@ -287,7 +286,7 @@ export async function getExchangeRate(
 }> {
   const apiKey = process.env.CHANGENOW_API_KEY;
   if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === "") {
-    throw new Error("ChangeNow API key is not configured");
+    throw new Error("Exchange API key is not configured");
   }
 
   const url = new URL(`${CHANGENOW_API_URL}/exchange/estimated-amount`);
