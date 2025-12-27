@@ -60,12 +60,15 @@ export default function Home() {
     return currentCurrency?.networks || [];
   }, [currentCurrency]);
 
-  // When currency changes, reset to default network
+  // When currency changes, reset to default network immediately
   useEffect(() => {
-    if (currentCurrency) {
-      setSelectedNetwork(currentCurrency.defaultNetwork);
+    if (currencies) {
+      const currency = currencies.find(c => c.ticker === selectedCurrency);
+      if (currency) {
+        setSelectedNetwork(currency.defaultNetwork);
+      }
     }
-  }, [currentCurrency]);
+  }, [selectedCurrency, currencies]);
 
   // Get current network config for placeholder
   const currentNetwork = useMemo(() => {
@@ -89,6 +92,11 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [transferAmount]);
 
+  // Check if network is valid for current currency before querying
+  const isNetworkValid = useMemo(() => {
+    return availableNetworks.some(n => n.id === selectedNetwork);
+  }, [availableNetworks, selectedNetwork]);
+
   const { data: feeEstimate, isLoading: isEstimatingFees } = trpc.transaction.estimateFees.useQuery(
     { 
       amount: debouncedAmount,
@@ -96,7 +104,7 @@ export default function Home() {
       network: selectedNetwork,
     },
     {
-      enabled: !!debouncedAmount && parseFloat(debouncedAmount) > 0 && !isNaN(parseFloat(debouncedAmount)),
+      enabled: !!debouncedAmount && parseFloat(debouncedAmount) > 0 && !isNaN(parseFloat(debouncedAmount)) && isNetworkValid,
       refetchOnWindowFocus: false,
     }
   );
