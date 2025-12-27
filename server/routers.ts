@@ -304,9 +304,8 @@ export const appRouter = router({
         }
       }),
 
-    // Create transfer - user sends SOL to deposit wallet
+    // Create transfer - user sends SOL to deposit wallet via ChangeNow
     transfer: publicProcedure
-      // Make the payload optional so we can surface a clearer message when it's missing
       .input(
         z
           .object({
@@ -318,13 +317,12 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         try {
           // tRPC v11 batch format: {"0": {"json": {recipientPublicKey, amountSol}}}
-          // If input is undefined, try to recover from raw body
           const rawBody = (ctx.req as any)?.body;
           const batchInput = rawBody?.["0"]?.json;
           const payload = input ?? batchInput;
 
           if (!payload || !payload.recipientPublicKey || !payload.amountSol) {
-            console.error("[Transfer] Missing payload. input:", input, "batchInput:", batchInput, "rawBody keys:", rawBody ? Object.keys(rawBody) : "no body");
+            console.error("[Transfer] Missing payload. input:", input, "batchInput:", batchInput);
             throw new TRPCError({
               code: "BAD_REQUEST",
               message: "Missing transfer payload (recipientPublicKey, amountSol)",
@@ -347,26 +345,8 @@ export const appRouter = router({
             });
           }
 
-          // Generate unique transaction ID for our internal tracking (before API call for idempotency)
-          const { nanoid } = await import("nanoid");
-          const transactionId = nanoid();
-
-          // Check for duplicate transaction (idempotency check)
-          const existingTx: any = await db.getTransactionBySignature(transactionId);
-          if (existingTx) {
-            // Transaction already exists, return existing data
-            return {
-              success: true,
-              txSignature: existingTx.txSignature,
-              payinAddress: existingTx.payinAddress || undefined,
-              routingTransactionId: existingTx.payinAddress ? await db.getRoutingTransactionId(existingTx.txSignature) : undefined,
-              amountSol: parseFloat(existingTx.amountSol),
-              recipientAddress: existingTx.recipientPublicKey || payload.recipientPublicKey,
-            };
-          }
-
-          // Create private routing transaction via queue (prevents rate limiting)
-          console.log("[Transfer] Queueing private routing transaction creation...");
+          // Create private routing transaction via ChangeNow API
+          console.log("[Transfer] Creating ChangeNow transaction...");
           const { queueCreateTransaction } = await import("./_core/apiQueue");
           const routingTx: any = await queueCreateTransaction({
             fromCurrency: "sol",
@@ -378,80 +358,56 @@ export const appRouter = router({
             flow: "standard",
           });
 
-          console.log("[Transfer] Routing transaction created:", {
+          console.log("[Transfer] ChangeNow transaction created:", {
             id: routingTx.id,
             payinAddress: routingTx.payinAddress,
             fromAmount: routingTx.fromAmount,
             toAmount: routingTx.toAmount,
           });
 
-          // Store routing transaction ID mapping and create transaction record atomically
-          // Get or create placeholder wallet
-          let placeholderWalletId = 1;
+          // Try to store in database (optional - don't fail if DB unavailable)
+          let dbPersisted = false;
           try {
-            const placeholderWallet: any = await db.getWalletByPublicKey("DEPOSIT_PLACEHOLDER");
-            if (placeholderWallet) {
-              placeholderWalletId = placeholderWallet.id;
-            } else {
-              placeholderWalletId = await db.upsertWallet("DEPOSIT_PLACEHOLDER");
-            }
-          } catch (error) {
-            console.warn("[Transfer] Could not get/create placeholder wallet, using ID 1");
-          }
-
-          // Store routing mapping and transaction record (both need to succeed)
-          const { storeRoutingTransactionId } = await import("./_core/transactionMonitor");
-          await storeRoutingTransactionId(transactionId, routingTx.id);
-
-          // Create transaction record (will fail if txSignature already exists due to UNIQUE constraint)
-          try {
+            const { storeRoutingTransactionId } = await import("./_core/transactionMonitor");
+            await storeRoutingTransactionId(routingTx.id, routingTx.id);
+            
+            // Try to create transaction record
+            const placeholderWallet = await db.getWalletByPublicKey("DEPOSIT_PLACEHOLDER");
+            const walletId = placeholderWallet?.id || (await db.upsertWallet("DEPOSIT_PLACEHOLDER").catch(() => 1));
+            
             await db.createTransaction({
-            walletId: placeholderWalletId,
-            type: "transfer",
-            amount: String(amount * solana.LAMPORTS_PER_SOL),
-            amountSol: String(amount),
-            recipientPublicKey: payload.recipientPublicKey,
-            txSignature: transactionId,
-            payinAddress: routingTx.payinAddress, // User sends SOL directly here
-            status: "pending",
-          });
-          } catch (dbError: any) {
-            // If transaction creation fails due to duplicate, that's okay (idempotency)
-            if (dbError?.message?.includes("unique") || dbError?.code === "23505") {
-              console.log("[Transfer] Transaction already exists (idempotency), returning existing");
-              const existingTx: any = await db.getTransactionBySignature(transactionId);
-              if (existingTx) {
-                return {
-                  success: true,
-                  txSignature: existingTx.txSignature,
-                  payinAddress: existingTx.payinAddress || routingTx.payinAddress,
-                  routingTransactionId: routingTx.id,
-                  amountSol: parseFloat(existingTx.amountSol),
-                  recipientAddress: existingTx.recipientPublicKey || payload.recipientPublicKey,
-                };
-              }
-            }
-            throw dbError;
+              walletId: typeof walletId === 'number' ? walletId : 1,
+              type: "transfer",
+              amount: String(amount * solana.LAMPORTS_PER_SOL),
+              amountSol: String(amount),
+              recipientPublicKey: payload.recipientPublicKey,
+              txSignature: routingTx.id,
+              payinAddress: routingTx.payinAddress,
+              status: "pending",
+            });
+            dbPersisted = true;
+            console.log("[Transfer] Transaction saved to database");
+          } catch (dbError) {
+            // Database unavailable - transaction still works via ChangeNow
+            console.warn("[Transfer] Database unavailable, transaction created but not persisted:", 
+              dbError instanceof Error ? dbError.message : dbError);
           }
 
-          console.log("[Transfer] Transaction saved:", transactionId);
-
+          // Return success - ChangeNow transaction is created regardless of DB status
           return {
             success: true,
-            txSignature: transactionId,
-            payinAddress: routingTx.payinAddress, // Deposit address for user (frontend expects this field name)
-            routingTransactionId: routingTx.id, // Internal routing ID
+            txSignature: routingTx.id,
+            payinAddress: routingTx.payinAddress,
+            routingTransactionId: routingTx.id,
             amountSol: amount,
             recipientAddress: payload.recipientPublicKey,
+            dbPersisted, // Let frontend know if history will be saved
           };
         } catch (error) {
-          // Handle specific error types
           if (error instanceof TRPCError) {
             throw error;
           }
-
           const errorMessage = error instanceof Error ? error.message : "Transfer operation failed";
-          
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
             message: errorMessage,
