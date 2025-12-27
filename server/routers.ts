@@ -317,11 +317,23 @@ export const appRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         try {
-          // Some environments (proxies/CDN) can strip the body; attempt to recover the raw input from the batch request for better resilience.
+          // Some environments (proxies/CDN) can strip or stringify the body; attempt to recover the raw input from the batch request for better resilience.
+          const parsePossibleJson = (value: unknown) => {
+            if (typeof value === "string") {
+              try {
+                return JSON.parse(value);
+              } catch {
+                return undefined;
+              }
+            }
+            return value;
+          };
+
+          const rawBody = parsePossibleJson((ctx.req as any)?.body);
           const rawInput =
-            Array.isArray((ctx.req as any)?.body) && (ctx.req as any)?.body.length > 0
-              ? (ctx.req as any).body[0]?.params?.input
-              : (ctx.req as any)?.body?.input;
+            Array.isArray(rawBody) && rawBody.length > 0
+              ? rawBody[0]?.params?.input
+              : rawBody?.input;
 
           const payload = input ?? rawInput;
 
