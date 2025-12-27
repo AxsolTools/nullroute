@@ -198,6 +198,7 @@ export async function createTransaction(
 
 /**
  * Get transaction status by ID
+ * Uses v1 API endpoint which is more reliable for status checks
  */
 export async function getTransactionStatus(
   transactionId: string
@@ -207,14 +208,12 @@ export async function getTransactionStatus(
     throw new Error("Exchange API key is not configured");
   }
 
-  const url = `${CHANGENOW_API_URL}/exchange/by-id/${transactionId}`;
+  // Use v1 API for status - more reliable than v2 for status checks
+  const url = `https://api.changenow.io/v1/transactions/${transactionId}/${apiKey}`;
 
   try {
     const response = await fetch(url, {
       method: "GET",
-      headers: {
-        "x-changenow-api-key": apiKey,
-      },
     });
 
     if (!response.ok) {
