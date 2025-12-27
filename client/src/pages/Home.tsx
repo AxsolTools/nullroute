@@ -126,6 +126,7 @@ export default function Home() {
       return;
     }
 
+    // Submit transfer transaction to backend
     transferMutation.mutate({
       recipientPublicKey: transferRecipient.trim(),
       amountSol: amountStr,
