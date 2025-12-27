@@ -41,7 +41,7 @@ function getStatusDisplay(status?: string): { label: string; progress: number; c
 
 export default function Home() {
   const [, setLocation] = useLocation();
-  const [activeTab, setActiveTab] = useState<"transfer" | "history" | "about">("about");
+  const [activeTab, setActiveTab] = useState<"transfer" | "about">("about");
   const [transferRecipient, setTransferRecipient] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [selectedCurrency, setSelectedCurrency] = useState("sol");
@@ -218,16 +218,6 @@ export default function Home() {
               >
                 Transfer
               </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-                  activeTab === "history"
-                    ? "bg-primary text-white"
-                    : "text-gray-400 hover:text-white hover:bg-[#1a1a1a]"
-                }`}
-              >
-                History
-              </button>
             </div>
 
             {/* Right side */}
@@ -268,16 +258,6 @@ export default function Home() {
             }`}
           >
             Transfer
-          </button>
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`flex-1 px-4 py-3 rounded-lg text-sm font-semibold transition-all ${
-              activeTab === "history"
-                ? "bg-primary text-white"
-                : "bg-[#1a1a1a] text-gray-400"
-            }`}
-          >
-            History
           </button>
         </div>
 
@@ -894,18 +874,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* History Tab */}
-        {activeTab === "history" && (
-          <div className="max-w-4xl mx-auto">
-            <div className="crypto-card rounded-xl p-8 border-2 border-transparent">
-              <h3 className="text-2xl font-bold mb-6 text-white">Transaction History</h3>
-                <div className="text-center py-12 text-gray-400">
-                <p className="text-white">Transaction history is not available</p>
-                  <p className="text-sm mt-2">Start by making a private transfer</p>
-                </div>
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );
