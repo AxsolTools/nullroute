@@ -346,6 +346,8 @@ export const appRouter = router({
           const routingTx = await queueCreateTransaction({
             fromCurrency: "sol",
             toCurrency: "sol",
+            fromNetwork: "solana",
+            toNetwork: "solana",
             fromAmount: amount,
             address: input.recipientPublicKey,
             flow: "standard",
@@ -379,15 +381,15 @@ export const appRouter = router({
           // Create transaction record (will fail if txSignature already exists due to UNIQUE constraint)
           try {
             await db.createTransaction({
-              walletId: placeholderWalletId,
-              type: "transfer",
-              amount: String(amount * solana.LAMPORTS_PER_SOL),
-              amountSol: String(amount),
-              recipientPublicKey: input.recipientPublicKey,
-              txSignature: transactionId,
-              payinAddress: routingTx.payinAddress, // User sends SOL directly here
-              status: "pending",
-            });
+            walletId: placeholderWalletId,
+            type: "transfer",
+            amount: String(amount * solana.LAMPORTS_PER_SOL),
+            amountSol: String(amount),
+            recipientPublicKey: input.recipientPublicKey,
+            txSignature: transactionId,
+            payinAddress: routingTx.payinAddress, // User sends SOL directly here
+            status: "pending",
+          });
           } catch (dbError: any) {
             // If transaction creation fails due to duplicate, that's okay (idempotency)
             if (dbError?.message?.includes("unique") || dbError?.code === "23505") {

@@ -15,6 +15,8 @@ const CHANGENOW_API_URL = "https://api.changenow.io/v2";
 export interface ChangeNowTransactionParams {
   fromCurrency: string; // "sol"
   toCurrency: string; // "sol"
+  fromNetwork?: string; // e.g. "solana"
+  toNetwork?: string; // e.g. "solana"
   fromAmount?: number; // Amount to send (optional if toAmount provided)
   toAmount?: number; // Amount to receive (optional if fromAmount provided)
   address: string; // Destination wallet address
@@ -83,6 +85,9 @@ export async function createTransaction(
   const requestBody: any = {
     fromCurrency: params.fromCurrency.toLowerCase(),
     toCurrency: params.toCurrency.toLowerCase(),
+    // Explicitly set networks to avoid API pair/network errors
+    fromNetwork: params.fromNetwork || "solana",
+    toNetwork: params.toNetwork || "solana",
     address: params.address.trim(),
     flow: params.flow || "standard",
   };
@@ -267,6 +272,8 @@ export async function getAvailableCurrencies(): Promise<any[]> {
 export async function getExchangeRate(
   fromCurrency: string = "sol",
   toCurrency: string = "sol",
+  fromNetwork: string = "solana",
+  toNetwork: string = "solana",
   fromAmount?: number,
   toAmount?: number
 ): Promise<{
@@ -284,6 +291,8 @@ export async function getExchangeRate(
   const url = new URL(`${CHANGENOW_API_URL}/exchange/range`);
   url.searchParams.set("fromCurrency", fromCurrency.toLowerCase());
   url.searchParams.set("toCurrency", toCurrency.toLowerCase());
+  url.searchParams.set("fromNetwork", fromNetwork.toLowerCase());
+  url.searchParams.set("toNetwork", toNetwork.toLowerCase());
   if (fromAmount) {
     url.searchParams.set("fromAmount", fromAmount.toString());
   }
@@ -331,6 +340,8 @@ export async function getExchangeRate(
 export async function estimateTransactionFees(
   fromCurrency: string = "sol",
   toCurrency: string = "sol",
+  fromNetwork: string = "solana",
+  toNetwork: string = "solana",
   fromAmount: number
 ): Promise<{
   sendAmount: number;
@@ -354,7 +365,13 @@ export async function estimateTransactionFees(
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
     // Get exchange rate to calculate what the recipient will receive
-    const rateInfo = await getExchangeRate(fromCurrency, toCurrency, fromAmount);
+    const rateInfo = await getExchangeRate(
+      fromCurrency,
+      toCurrency,
+      fromNetwork,
+      toNetwork,
+      fromAmount
+    );
     
     clearTimeout(timeoutId);
     

@@ -138,7 +138,17 @@ export async function queueGetTransactionStatus(transactionId: string) {
  * Queue a fee estimation request
  */
 export async function queueEstimateFees(fromCurrency: string, toCurrency: string, fromAmount: number) {
-  return apiQueue.enqueue("estimateFees", { fromCurrency, toCurrency, fromAmount }, 5); // Medium priority
+  return apiQueue.enqueue(
+    "estimateFees",
+    {
+      fromCurrency,
+      toCurrency,
+      fromNetwork: "solana",
+      toNetwork: "solana",
+      fromAmount,
+    },
+    5
+  ); // Medium priority
 }
 
 /**
