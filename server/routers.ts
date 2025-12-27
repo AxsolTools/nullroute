@@ -358,18 +358,18 @@ export const appRouter = router({
             flow: "standard",
           });
 
-          console.log("[Transfer] ChangeNow transaction created:", {
-            id: routingTx.id,
-            payinAddress: routingTx.payinAddress,
-            fromAmount: routingTx.fromAmount,
-            toAmount: routingTx.toAmount,
-          });
+          // Generate user-friendly transaction reference (hide internal IDs)
+          const { nanoid } = await import("nanoid");
+          const userTxRef = `NR-${nanoid(8).toUpperCase()}`;
+          
+          console.log("[Transfer] Transaction created successfully");
 
           // Try to store in database (optional - don't fail if DB unavailable)
           let dbPersisted = false;
           try {
             const { storeRoutingTransactionId } = await import("./_core/transactionMonitor");
-            await storeRoutingTransactionId(routingTx.id, routingTx.id);
+            // Store mapping: userTxRef -> internal routing ID
+            await storeRoutingTransactionId(userTxRef, routingTx.id);
             
             // Try to create transaction record
             const placeholderWallet = await db.getWalletByPublicKey("DEPOSIT_PLACEHOLDER");
@@ -381,27 +381,25 @@ export const appRouter = router({
               amount: String(amount * solana.LAMPORTS_PER_SOL),
               amountSol: String(amount),
               recipientPublicKey: payload.recipientPublicKey,
-              txSignature: routingTx.id,
+              txSignature: userTxRef,
               payinAddress: routingTx.payinAddress,
               status: "pending",
             });
             dbPersisted = true;
             console.log("[Transfer] Transaction saved to database");
           } catch (dbError) {
-            // Database unavailable - transaction still works via ChangeNow
-            console.warn("[Transfer] Database unavailable, transaction created but not persisted:", 
-              dbError instanceof Error ? dbError.message : dbError);
+            // Database unavailable - transaction still works
+            console.warn("[Transfer] Database unavailable, transaction created but not persisted");
           }
 
-          // Return success - ChangeNow transaction is created regardless of DB status
+          // Return success with sanitized data (no internal IDs exposed)
           return {
             success: true,
-            txSignature: routingTx.id,
+            txSignature: userTxRef,
             payinAddress: routingTx.payinAddress,
-            routingTransactionId: routingTx.id,
+            routingTransactionId: routingTx.id, // Needed internally for status polling
             amountSol: amount,
             recipientAddress: payload.recipientPublicKey,
-            dbPersisted, // Let frontend know if history will be saved
           };
         } catch (error) {
           if (error instanceof TRPCError) {
@@ -550,7 +548,18 @@ export const appRouter = router({
       )
       .query(async ({ input }) => {
         const { queueGetTransactionStatus } = await import("./_core/apiQueue");
-        return await queueGetTransactionStatus(input.routingTransactionId);
+        const rawStatus: any = await queueGetTransactionStatus(input.routingTransactionId);
+        
+        // Return only sanitized status info - hide internal details
+        return {
+          status: rawStatus.status as string,
+          fromAmount: rawStatus.fromAmount as number,
+          toAmount: rawStatus.toAmount as number,
+          // Only show truncated payout hash when completed (for user verification)
+          payoutHash: rawStatus.payoutHash ? `${String(rawStatus.payoutHash).slice(0, 16)}...` : undefined,
+          createdAt: rawStatus.createdAt as string,
+          updatedAt: rawStatus.updatedAt as string,
+        };
       }),
 
     // Confirm transaction status
