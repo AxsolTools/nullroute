@@ -90,6 +90,8 @@ class APIQueue {
             result = await estimateTransactionFees(
               item.params.fromCurrency,
               item.params.toCurrency,
+              item.params.fromNetwork ?? "solana",
+              item.params.toNetwork ?? "solana",
               item.params.fromAmount
             );
             break;
