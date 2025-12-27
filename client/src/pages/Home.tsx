@@ -274,19 +274,28 @@ export default function Home() {
                   NR <span className="text-primary">Ø</span> ROUTE
                 </h1>
                 
-                {/* Technical Specifications */}
+                {/* Supported Currencies */}
                 <div className="flex flex-wrap justify-center items-center gap-6 text-sm font-mono text-gray-400">
                   <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
-                    <span className="text-primary">80%</span> MIN.
+                    <span className="text-primary">SOL</span>
                   </div>
                   <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
-                    NR24-61-R122
+                    <span className="text-primary">BTC</span>
                   </div>
                   <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
-                    PRIVACY TRANSP.
+                    <span className="text-primary">ETH</span>
                   </div>
                   <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
-                    NR24-ZK51-R122
+                    <span className="text-primary">BNB</span>
+                  </div>
+                  <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
+                    <span className="text-primary">XRP</span>
+                  </div>
+                  <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
+                    <span className="text-primary">USDT</span>
+                  </div>
+                  <div className="px-4 py-2 rounded-lg bg-[#1a1a1a] border border-[#333333]">
+                    <span className="text-primary">USDC</span>
                   </div>
                 </div>
 
