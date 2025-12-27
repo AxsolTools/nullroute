@@ -278,16 +278,22 @@ export const appRouter = router({
             });
           }
 
-          // Import routing service to estimate fees via queue (prevents rate limiting)
-          const { queueEstimateFees } = await import("./_core/apiQueue");
-          const feeEstimate: any = await queueEstimateFees("SOL", "SOL", amount);
+          // Direct ChangeNow estimate call (bypass queue) with explicit SOL/solana
+          const { estimateTransactionFees } = await import("./_core/changenow");
+          const feeEstimate = await estimateTransactionFees(
+            "SOL",
+            "SOL",
+            "solana",
+            "solana",
+            amount
+          );
 
           return {
-            sendAmount: Number(feeEstimate?.sendAmount ?? amount),
-            receiveAmount: Number(feeEstimate?.receiveAmount ?? amount),
-            feeAmount: Number(feeEstimate?.feeAmount ?? 0),
-            feePercentage: Number(feeEstimate?.feePercentage ?? 0),
-            isValid: !!feeEstimate?.isValid,
+            sendAmount: Number(feeEstimate.sendAmount ?? amount),
+            receiveAmount: Number(feeEstimate.receiveAmount ?? amount),
+            feeAmount: Number(feeEstimate.feeAmount ?? 0),
+            feePercentage: Number(feeEstimate.feePercentage ?? 0),
+            isValid: !!feeEstimate.isValid,
           };
         } catch (error) {
           throw new TRPCError({
