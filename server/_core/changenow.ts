@@ -7,7 +7,15 @@
  * Documentation: https://documenter.getpostman.com/view/8180765/SVfTPnM8?version=latest
  */
 
-const CHANGENOW_API_KEY = process.env.CHANGENOW_API_KEY || "";
+// Read API key at runtime to ensure environment variables are available
+function getChangeNowApiKey(): string {
+  const apiKey = process.env.CHANGENOW_API_KEY || "";
+  if (!apiKey) {
+    console.warn("[ChangeNow] CHANGENOW_API_KEY environment variable is not set");
+  }
+  return apiKey;
+}
+
 const CHANGENOW_API_URL = "https://api.changenow.io/v2";
 
 export interface ChangeNowTransactionParams {
@@ -58,7 +66,8 @@ export interface ChangeNowTransactionStatus {
 export async function createTransaction(
   params: ChangeNowTransactionParams
 ): Promise<ChangeNowTransactionResponse> {
-  if (!CHANGENOW_API_KEY) {
+  const apiKey = getChangeNowApiKey();
+  if (!apiKey) {
     throw new Error("ChangeNow API key is not configured. Please set CHANGENOW_API_KEY environment variable.");
   }
 
@@ -109,7 +118,7 @@ export async function createTransaction(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-changenow-api-key": CHANGENOW_API_KEY,
+          "x-changenow-api-key": apiKey,
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal,
@@ -193,7 +202,8 @@ export async function createTransaction(
 export async function getTransactionStatus(
   transactionId: string
 ): Promise<ChangeNowTransactionStatus> {
-  if (!CHANGENOW_API_KEY) {
+  const apiKey = getChangeNowApiKey();
+  if (!apiKey) {
     throw new Error("ChangeNow API key is not configured");
   }
 
@@ -203,7 +213,7 @@ export async function getTransactionStatus(
     const response = await fetch(url, {
       method: "GET",
       headers: {
-        "x-changenow-api-key": CHANGENOW_API_KEY,
+        "x-changenow-api-key": apiKey,
       },
     });
 
@@ -228,7 +238,8 @@ export async function getTransactionStatus(
  * Get available currencies
  */
 export async function getAvailableCurrencies(): Promise<any[]> {
-  if (!CHANGENOW_API_KEY) {
+  const apiKey = getChangeNowApiKey();
+  if (!apiKey) {
     throw new Error("ChangeNow API key is not configured");
   }
 
@@ -238,7 +249,7 @@ export async function getAvailableCurrencies(): Promise<any[]> {
     const response = await fetch(url, {
       method: "GET",
       headers: {
-        "x-changenow-api-key": CHANGENOW_API_KEY,
+        "x-changenow-api-key": apiKey,
       },
     });
 
@@ -271,7 +282,8 @@ export async function getExchangeRate(
   toAmount: number;
   rate: number;
 }> {
-  if (!CHANGENOW_API_KEY) {
+  const apiKey = getChangeNowApiKey();
+  if (!apiKey) {
     throw new Error("ChangeNow API key is not configured");
   }
 
@@ -293,7 +305,7 @@ export async function getExchangeRate(
     const response = await fetch(url.toString(), {
       method: "GET",
       headers: {
-        "x-changenow-api-key": CHANGENOW_API_KEY,
+        "x-changenow-api-key": apiKey,
       },
       signal: controller.signal,
     });
@@ -333,7 +345,8 @@ export async function estimateTransactionFees(
   feePercentage: number;
   isValid: boolean;
 }> {
-  if (!CHANGENOW_API_KEY) {
+  const apiKey = getChangeNowApiKey();
+  if (!apiKey) {
     throw new Error("API key is not configured");
   }
 
