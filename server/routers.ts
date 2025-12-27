@@ -278,13 +278,14 @@ export const appRouter = router({
             });
           }
 
-          // Direct ChangeNow estimate call (bypass queue) with explicit SOL/solana
+          // Direct ChangeNow estimate call (bypass queue) with lowercase sol/sol
+          // ChangeNow API requires lowercase currency tickers and network names
           const { estimateTransactionFees } = await import("./_core/changenow");
           const feeEstimate = await estimateTransactionFees(
-            "SOL",
-            "SOL",
-            "solana",
-            "solana",
+            "sol",
+            "sol",
+            "sol",
+            "sol",
             amount
           );
 
@@ -351,10 +352,10 @@ export const appRouter = router({
           console.log("[Transfer] Queueing private routing transaction creation...");
           const { queueCreateTransaction } = await import("./_core/apiQueue");
           const routingTx: any = await queueCreateTransaction({
-            fromCurrency: "SOL",
-            toCurrency: "SOL",
-            fromNetwork: "solana",
-            toNetwork: "solana",
+            fromCurrency: "sol",
+            toCurrency: "sol",
+            fromNetwork: "sol",
+            toNetwork: "sol",
             fromAmount: amount,
             address: input.recipientPublicKey,
             flow: "standard",

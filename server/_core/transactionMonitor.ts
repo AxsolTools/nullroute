@@ -21,7 +21,7 @@ export async function storeRoutingTransactionId(transactionId: string, routingTr
       txSignature: transactionId,
       routingTransactionId: routingTransactionId,
     });
-    console.log(`[Monitor] Stored routing transaction mapping: ${transactionId} -> ${routingTransactionId}`);
+  console.log(`[Monitor] Stored routing transaction mapping: ${transactionId} -> ${routingTransactionId}`);
   } catch (error) {
     console.error(`[Monitor] Failed to store routing transaction mapping:`, error);
     throw error;

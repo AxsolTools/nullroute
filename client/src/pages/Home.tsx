@@ -802,10 +802,10 @@ export default function Home() {
           <div className="max-w-4xl mx-auto">
             <div className="crypto-card rounded-xl p-8 border-2 border-transparent">
               <h3 className="text-2xl font-bold mb-6 text-white">Transaction History</h3>
-              <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-gray-400">
                 <p className="text-white">Transaction history is not available</p>
-                <p className="text-sm mt-2">Start by making a private transfer</p>
-              </div>
+                  <p className="text-sm mt-2">Start by making a private transfer</p>
+                </div>
             </div>
           </div>
         )}

@@ -143,10 +143,10 @@ export async function queueEstimateFees(fromCurrency: string, toCurrency: string
   return apiQueue.enqueue(
     "estimateFees",
     {
-      fromCurrency,
-      toCurrency,
-      fromNetwork: "solana",
-      toNetwork: "solana",
+      fromCurrency: fromCurrency.toLowerCase(),
+      toCurrency: toCurrency.toLowerCase(),
+      fromNetwork: "sol",
+      toNetwork: "sol",
       fromAmount,
     },
     5

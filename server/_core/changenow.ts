@@ -13,10 +13,10 @@
 const CHANGENOW_API_URL = "https://api.changenow.io/v2";
 
 export interface ChangeNowTransactionParams {
-  fromCurrency: string; // "sol"
-  toCurrency: string; // "sol"
-  fromNetwork?: string; // e.g. "solana"
-  toNetwork?: string; // e.g. "solana"
+  fromCurrency: string; // "sol" (lowercase)
+  toCurrency: string; // "sol" (lowercase)
+  fromNetwork?: string; // "sol" (lowercase - ChangeNow network name)
+  toNetwork?: string; // "sol" (lowercase - ChangeNow network name)
   fromAmount?: number; // Amount to send (optional if toAmount provided)
   toAmount?: number; // Amount to receive (optional if fromAmount provided)
   address: string; // Destination wallet address
@@ -83,12 +83,12 @@ export async function createTransaction(
   }
 
   const requestBody: any = {
-    // Use the exact currency codes expected by ChangeNow (case-sensitive)
-    fromCurrency: params.fromCurrency,
-    toCurrency: params.toCurrency,
-    // Explicitly set networks to avoid API pair/network errors
-    fromNetwork: params.fromNetwork || "solana",
-    toNetwork: params.toNetwork || "solana",
+    // ChangeNow expects lowercase currency tickers (sol, btc, eth)
+    fromCurrency: params.fromCurrency.toLowerCase(),
+    toCurrency: params.toCurrency.toLowerCase(),
+    // Network must also be lowercase (sol, eth, btc)
+    fromNetwork: (params.fromNetwork || "sol").toLowerCase(),
+    toNetwork: (params.toNetwork || "sol").toLowerCase(),
     address: params.address.trim(),
     flow: params.flow || "standard",
   };
@@ -269,12 +269,13 @@ export async function getAvailableCurrencies(): Promise<any[]> {
 
 /**
  * Get exchange rate for SOL to SOL
+ * Note: ChangeNow API uses lowercase currency tickers (sol, btc, eth)
  */
 export async function getExchangeRate(
-  fromCurrency: string = "SOL",
-  toCurrency: string = "SOL",
-  fromNetwork: string = "solana",
-  toNetwork: string = "solana",
+  fromCurrency: string = "sol",
+  toCurrency: string = "sol",
+  fromNetwork: string = "sol",
+  toNetwork: string = "sol",
   fromAmount?: number,
   toAmount?: number
 ): Promise<{
@@ -289,11 +290,12 @@ export async function getExchangeRate(
     throw new Error("ChangeNow API key is not configured");
   }
 
-  const url = new URL(`${CHANGENOW_API_URL}/exchange/range`);
-  url.searchParams.set("fromCurrency", fromCurrency);
-  url.searchParams.set("toCurrency", toCurrency);
-  url.searchParams.set("fromNetwork", fromNetwork);
-  url.searchParams.set("toNetwork", toNetwork);
+  const url = new URL(`${CHANGENOW_API_URL}/exchange/estimated-amount`);
+  // ChangeNow requires lowercase for all params
+  url.searchParams.set("fromCurrency", fromCurrency.toLowerCase());
+  url.searchParams.set("toCurrency", toCurrency.toLowerCase());
+  url.searchParams.set("fromNetwork", fromNetwork.toLowerCase());
+  url.searchParams.set("toNetwork", toNetwork.toLowerCase());
   if (fromAmount) {
     url.searchParams.set("fromAmount", fromAmount.toString());
   }
@@ -337,12 +339,13 @@ export async function getExchangeRate(
 /**
  * Estimate transaction fees and receive amount
  * Returns fee information without exposing ChangeNow branding
+ * Note: ChangeNow API uses lowercase currency tickers and network names
  */
 export async function estimateTransactionFees(
-  fromCurrency: string = "SOL",
-  toCurrency: string = "SOL",
-  fromNetwork: string = "solana",
-  toNetwork: string = "solana",
+  fromCurrency: string = "sol",
+  toCurrency: string = "sol",
+  fromNetwork: string = "sol",
+  toNetwork: string = "sol",
   fromAmount: number
 ): Promise<{
   sendAmount: number;
