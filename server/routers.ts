@@ -306,14 +306,24 @@ export const appRouter = router({
 
     // Create transfer - user sends SOL to deposit wallet
     transfer: publicProcedure
+      // Make the payload optional so we can surface a clearer message when it's missing
       .input(
-        z.object({
-          recipientPublicKey: z.string().min(32).max(64),
-          amountSol: z.string(),
-        })
+        z
+          .object({
+            recipientPublicKey: z.string().min(32).max(64),
+            amountSol: z.string(),
+          })
+          .nullish()
       )
       .mutation(async ({ input }) => {
         try {
+          if (!input) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Missing transfer payload (recipientPublicKey, amountSol)",
+            });
+          }
+
           // Validate recipient
           if (!solana.isValidPublicKey(input.recipientPublicKey)) {
             throw new TRPCError({
