@@ -72,16 +72,14 @@ async function startServer() {
     console.error("[Server] Failed to initialize transaction monitor:", error);
   }
   
-  // tRPC API - handle all HTTP methods
-  const trpcMiddleware = createExpressMiddleware({
+  // tRPC API - mount using app.use for proper path handling
+  app.use("/api/trpc", createExpressMiddleware({
     router: appRouter,
     createContext,
     onError: ({ error, path, type }) => {
       console.error(`[tRPC] Error on path ${path} (${type}):`, error);
     },
-  });
-  
-  app.all("/api/trpc/*", trpcMiddleware);
+  }));
   
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
