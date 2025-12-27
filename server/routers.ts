@@ -134,7 +134,7 @@ export const appRouter = router({
           const { wallets } = await import("../drizzle/schema");
           const { eq } = await import("drizzle-orm");
           
-          await dbInstance.update(wallets)
+          await (dbInstance as any).update(wallets as any)
             .set({ isActive: 0, updatedAt: new Date() })
             .where(eq(wallets.publicKey, input.publicKey));
 
@@ -279,14 +279,14 @@ export const appRouter = router({
 
           // Import routing service to estimate fees via queue (prevents rate limiting)
           const { queueEstimateFees } = await import("./_core/apiQueue");
-          const feeEstimate = await queueEstimateFees("sol", "sol", amount);
+          const feeEstimate: any = await queueEstimateFees("SOL", "SOL", amount);
 
           return {
-            sendAmount: feeEstimate.sendAmount,
-            receiveAmount: feeEstimate.receiveAmount,
-            feeAmount: feeEstimate.feeAmount,
-            feePercentage: feeEstimate.feePercentage,
-            isValid: feeEstimate.isValid,
+            sendAmount: Number(feeEstimate?.sendAmount ?? amount),
+            receiveAmount: Number(feeEstimate?.receiveAmount ?? amount),
+            feeAmount: Number(feeEstimate?.feeAmount ?? 0),
+            feePercentage: Number(feeEstimate?.feePercentage ?? 0),
+            isValid: !!feeEstimate?.isValid,
           };
         } catch (error) {
           throw new TRPCError({
@@ -343,7 +343,7 @@ export const appRouter = router({
           // Create private routing transaction via queue (prevents rate limiting)
           console.log("[Transfer] Queueing private routing transaction creation...");
           const { queueCreateTransaction } = await import("./_core/apiQueue");
-          const routingTx = await queueCreateTransaction({
+          const routingTx: any = await queueCreateTransaction({
             fromCurrency: "SOL",
             toCurrency: "SOL",
             fromNetwork: "solana",
@@ -495,14 +495,14 @@ export const appRouter = router({
           return [];
         }
 
-        const { transactions } = await import("../drizzle/schema");
-        const { desc } = await import("drizzle-orm");
+          const { transactions } = await import("../drizzle/schema");
+          const { desc } = await import("drizzle-orm");
 
-        return await dbInstance
-          .select()
-          .from(transactions)
-          .orderBy(desc(transactions.createdAt))
-          .limit(50);
+          return await (dbInstance as any)
+            .select()
+            .from(transactions as any)
+            .orderBy(desc((transactions as any).createdAt))
+            .limit(50);
       }),
 
     // Get transaction history for a specific wallet
