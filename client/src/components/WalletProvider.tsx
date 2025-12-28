@@ -17,14 +17,14 @@ interface WalletProviderProps {
 }
 
 export const WalletProvider: FC<WalletProviderProps> = ({ children }) => {
-  // Get RPC endpoint from environment or use mainnet
+  // Get RPC endpoint from environment or use Helius mainnet
   const endpoint = useMemo(() => {
     const rpcEndpoint = import.meta.env.VITE_SOLANA_RPC_ENDPOINT;
     if (rpcEndpoint && rpcEndpoint.trim() !== '') {
       return rpcEndpoint.trim();
     }
-    // Fallback to mainnet for production token checks
-    return clusterApiUrl('mainnet-beta');
+    // Fallback to Helius mainnet for reliable connections
+    return "https://mainnet.helius-rpc.com/?api-key=f7ed61b3-6e69-4ff8-b086-0f361e9dffb2";
   }, []);
 
   // Initialize wallet adapters

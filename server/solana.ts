@@ -16,8 +16,8 @@ import { getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError } 
  */
 
 // Environment configuration
-// Default to mainnet for production token gate checks
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT || "https://api.mainnet-beta.solana.com";
+// Default to Helius mainnet RPC for reliable token gate checks
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT || "https://mainnet.helius-rpc.com/?api-key=f7ed61b3-6e69-4ff8-b086-0f361e9dffb2";
 const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta";
 
 /**
