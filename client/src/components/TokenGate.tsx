@@ -3,7 +3,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { NULL_REQUIRED_BALANCE } from '@shared/const';
+import { NULL_REQUIRED_BALANCE, TOKEN_GATE_ENABLED } from '@shared/const';
 
 interface TokenGateProps {
   children: ReactNode;
@@ -35,6 +35,11 @@ export const TokenGate: FC<TokenGateProps> = ({ children, onGateBlocked }) => {
   const { publicKey, connected, connecting } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
   const [gateState, setGateState] = useState<TokenGateState>({ status: 'idle' });
+
+  // If token gate is disabled, render children directly
+  if (!TOKEN_GATE_ENABLED) {
+    return <>{children}</>;
+  }
 
   // Query for token verification
   const verifyQuery = trpc.wallet.verifyTokenGate.useQuery(
@@ -223,16 +228,30 @@ export function useTokenGateStatus() {
   const verifyQuery = trpc.wallet.verifyTokenGate.useQuery(
     { publicKey: publicKey?.toBase58() || '' },
     {
-      enabled: connected && !!publicKey,
+      enabled: TOKEN_GATE_ENABLED && connected && !!publicKey,
       staleTime: 30000,
       refetchOnWindowFocus: false,
     }
   );
 
+  // If token gate is disabled, always return eligible
+  if (!TOKEN_GATE_ENABLED) {
+    return {
+      isConnected: connected,
+      isChecking: false,
+      isEligible: true,
+      isGateEnabled: false,
+      balance: 0,
+      required: NULL_REQUIRED_BALANCE,
+      refetch: verifyQuery.refetch,
+    };
+  }
+
   return {
     isConnected: connected,
     isChecking: verifyQuery.isLoading,
     isEligible: verifyQuery.data?.isEligible ?? false,
+    isGateEnabled: true,
     balance: verifyQuery.data?.balance ?? 0,
     required: NULL_REQUIRED_BALANCE,
     refetch: verifyQuery.refetch,

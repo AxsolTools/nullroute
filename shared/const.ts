@@ -5,6 +5,7 @@ export const UNAUTHED_ERR_MSG = 'Please login (10001)';
 export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 
 // Token Gate Configuration
+export const TOKEN_GATE_ENABLED = false; // Set to true to enable token gate
 export const NULL_TOKEN_MINT = "B7tP6jNAcSmnvcuKsTFdvTAJHMkEQaXse8TMxoq2pump";
 export const NULL_REQUIRED_BALANCE = 5_000_000; // 5M NULL tokens required
 export const NULL_TOKEN_DECIMALS = 6; // SPL token decimals
