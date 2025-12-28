@@ -17,14 +17,14 @@ interface WalletProviderProps {
 }
 
 export const WalletProvider: FC<WalletProviderProps> = ({ children }) => {
-  // Get RPC endpoint from environment or use devnet
+  // Get RPC endpoint from environment or use mainnet
   const endpoint = useMemo(() => {
     const rpcEndpoint = import.meta.env.VITE_SOLANA_RPC_ENDPOINT;
     if (rpcEndpoint && rpcEndpoint.trim() !== '') {
       return rpcEndpoint.trim();
     }
-    // Fallback to devnet
-    return clusterApiUrl('devnet');
+    // Fallback to mainnet for production token checks
+    return clusterApiUrl('mainnet-beta');
   }, []);
 
   // Initialize wallet adapters

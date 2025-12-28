@@ -16,8 +16,9 @@ import { getAssociatedTokenAddressSync, getAccount, TokenAccountNotFoundError } 
  */
 
 // Environment configuration
-const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT || "https://api.devnet.solana.com";
-const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "devnet";
+// Default to mainnet for production token gate checks
+const SOLANA_RPC_ENDPOINT = process.env.SOLANA_RPC_ENDPOINT || "https://api.mainnet-beta.solana.com";
+const SOLANA_NETWORK = process.env.SOLANA_NETWORK || "mainnet-beta";
 
 /**
  * Get Solana connection
